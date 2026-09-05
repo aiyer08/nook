@@ -9,12 +9,18 @@ import { Board } from './components/Board';
 import { TodayView } from './components/TodayView';
 import { AvatarPanel, SectorsPanel, SettingsPanel } from './components/Panels';
 import { GardenPicker } from './components/Garden';
+import { GardenPage } from './components/GardenPage';
+import { WrappedPanel } from './components/Wrapped';
+import { Burrow } from './components/Burrow';
+import { LampGlow, WeatherWatch } from './components/Sky';
+import { FocusOverlay } from './components/Focus';
 import { CalendarSyncPanel, useAutoSync } from './components/CalendarSync';
 import { Confetti, Empty, Toasts } from './components/ui';
 import { Icon } from './components/Icons';
 import { COSMETICS } from './lib/cosmetics';
 import { today } from './lib/dates';
 import { play } from './lib/sound';
+import { startAmbient, stopAmbient } from './lib/ambient';
 
 export default function App() {
   const doc = useDoc((s) => s.doc);
@@ -77,6 +83,21 @@ export default function App() {
     return () => window.clearInterval(t);
   }, [doc.settings.timeTint]);
 
+  /* ---- the cozy background loop ---- */
+  useEffect(() => {
+    if (doc.settings.ambient === 'off') { stopAmbient(); return; }
+    /**
+     * Browsers won't start audio until the page has been interacted with, so
+     * the first gesture after switching it on is what actually opens the tap.
+     */
+    const begin = () => startAmbient(doc.settings.ambient, doc.settings.ambientVolume);
+    begin();
+    window.addEventListener('pointerdown', begin, { once: true });
+    return () => window.removeEventListener('pointerdown', begin);
+  }, [doc.settings.ambient, doc.settings.ambientVolume]);
+
+  useEffect(() => () => stopAmbient(), []);
+
   /* ---- cosmetic unlocks ---- */
   const seenCount = useRef<number | null>(null);
   useEffect(() => {
@@ -125,6 +146,7 @@ export default function App() {
       else if (k === 'm') setTool('marker');
       else if (k === 'e') setTool('eraser');
       else if (k === 'n') { e.preventDefault(); setPanel('widgets'); }
+      else if (k === 'g') { e.preventDefault(); setPanel('garden'); }
       else if (k === 'escape') { setPanel(null); setTodayOpen(false); }
       else if (/^[1-9]$/.test(k)) {
         const target = sectors[Number(k) - 1];
@@ -194,11 +216,19 @@ export default function App() {
       </div>
 
       <GardenPicker open={panel === 'widgets'} onClose={() => setPanel(null)} />
+      <GardenPage open={panel === 'garden'} onClose={() => setPanel(null)} />
+      <WrappedPanel open={panel === 'wrapped'} onClose={() => setPanel(null)} />
       <SettingsPanel open={panel === 'settings'} onClose={() => setPanel(null)} />
       <AvatarPanel open={panel === 'avatar'} onClose={() => setPanel(null)} />
       <SectorsPanel open={panel === 'sectors'} onClose={() => setPanel(null)} />
       <CalendarSyncPanel open={panel === 'calendars'} onClose={() => setPanel(null)} />
       <TodayView open={todayOpen} onClose={() => setTodayOpen(false)} />
+
+      {/* the weather outside, the lamp after dark, and the mouse who lives here */}
+      <WeatherWatch />
+      <LampGlow />
+      <FocusOverlay />
+      <Burrow />
 
       <Confetti trigger={celebrate} enabled={doc.settings.confetti} />
       <Toasts />

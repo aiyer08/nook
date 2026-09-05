@@ -2,12 +2,13 @@ import { useMemo, useRef, useState } from 'react';
 import { Panel, Toggle, Field, Row, Empty } from './ui';
 import { Icon, SECTOR_ICONS, type IconName } from './Icons';
 import { useDoc, useUI, storageUsed, sortedSectors } from '../lib/store';
-import type { Doc } from '../lib/types';
+import type { Ambient, Doc } from '../lib/types';
 import { PASTELS, THEMES, readableOn } from '../lib/themes';
 import { formatBytes } from '../lib/media';
 import { Avatar, AvatarRoom, AVATAR_COLORS, SPECIES_LIST } from './Avatar';
 import { COSMETICS, cosmeticsFor, isUnlocked, type Cosmetic } from '../lib/cosmetics';
 import { seasonOf } from '../lib/dates';
+import { SKY_LABEL, findPlace, locate } from '../lib/weather';
 
 /* ------------------------------------------------------------------ */
 /* widget picker                                                       */
@@ -409,7 +410,21 @@ export function SettingsPanel({ open, onClose }: { open: boolean; onClose: () =>
           label="Avatar movement"
           hint="Turn off if the idle breathing is distracting."
         />
+        <Toggle
+          on={settings.lampGlow}
+          onChange={(v) => update({ lampGlow: v })}
+          label="Lamplight after dark"
+          hint="A warm pool over the middle of the page, dimmer at the edges."
+        />
+        <Toggle
+          on={settings.burrow}
+          onChange={(v) => update({ burrow: v })}
+          label={`${doc.avatar.name}'s burrow`}
+          hint="They live in the corner of the page, come out, tidy, nap — and carry tasks between tabs. Once a day they hide behind a widget."
+        />
       </div>
+
+      <AtmospherePanel />
 
       <Field label="This page">
         <Row>
@@ -500,3 +515,126 @@ export function SettingsPanel({ open, onClose }: { open: boolean; onClose: () =>
     </Panel>
   );
 }
+
+/**
+ * The weather and the background loop.
+ *
+ * Both are off until asked for: weather needs somewhere to ask about, and
+ * sound that starts on its own is the fastest way to make someone leave.
+ */
+function AtmospherePanel() {
+  const settings = useDoc((s) => s.doc.settings);
+  const update = useDoc((s) => s.updateSettings);
+  const sky = useUI((s) => s.sky);
+  const toast = useUI((s) => s.toast);
+
+  const [town, setTown] = useState('');
+  const [busy, setBusy] = useState(false);
+
+  const useHere = async () => {
+    setBusy(true);
+    try {
+      const place = await locate();
+      update({ place, weather: true });
+      toast('Got it. The weather outside will show up on the page.');
+    } catch (err) {
+      toast(err instanceof Error ? err.message : 'Couldn’t get a location.', 'warn');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const lookUp = async () => {
+    const name = town.trim();
+    if (!name) return;
+    setBusy(true);
+    try {
+      const place = await findPlace(name);
+      if (!place) { toast(`Couldn’t find “${name}”.`, 'warn'); return; }
+      update({ place, weather: true });
+      setTown('');
+      toast(`Weather set to ${place.label}.`);
+    } catch {
+      toast('The lookup didn’t answer. Try again in a moment?', 'warn');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <>
+      <Field
+        label="Weather on the paper"
+        hint={
+          settings.place
+            ? sky
+              ? `${SKY_LABEL[sky.sky]}, ${sky.temp}°C in ${sky.place}.`
+              : `Asking about ${settings.place.label}…`
+            : 'Rain outside puts raindrops on your page; snow settles on the top of each widget.'
+        }
+      >
+        <Toggle
+          on={settings.weather}
+          onChange={(v) => {
+            // no point turning it on with nowhere to ask about
+            if (v && !settings.place) { void useHere(); return; }
+            update({ weather: v });
+          }}
+          label="Show the real weather"
+          hint={settings.place ? undefined : 'Needs a rough location — a town is plenty.'}
+        />
+        <Row>
+          <button className="btn" onClick={useHere} disabled={busy}>
+            <Icon name="target" size={15} /> Use where I am
+          </button>
+          <input
+            value={town}
+            onChange={(e) => setTown(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter') void lookUp(); }}
+            placeholder="or type a town…"
+            aria-label="Town for the weather"
+            style={{ flex: 1, minWidth: 130 }}
+          />
+          <button className="btn" onClick={lookUp} disabled={busy || !town.trim()}>Set</button>
+        </Row>
+      </Field>
+
+      <Field label="Cozy sound" hint="Synthesised, so there's nothing to download. Off by default.">
+        <Row>
+          {AMBIENTS.map((a) => (
+            <button
+              key={a.id}
+              className={`btn ${settings.ambient === a.id ? 'primary' : ''}`}
+              onClick={() => update({ ambient: a.id })}
+              aria-pressed={settings.ambient === a.id}
+            >
+              <Icon name={a.icon} size={15} /> {a.label}
+            </button>
+          ))}
+        </Row>
+        {settings.ambient !== 'off' && (
+          <label style={{ display: 'block', marginTop: 8, fontSize: 12, color: 'var(--ink-soft)' }}>
+            Volume
+            <input
+              type="range"
+              min={0.1}
+              max={1}
+              step={0.05}
+              value={settings.ambientVolume}
+              onChange={(e) => update({ ambientVolume: Number(e.target.value) })}
+              style={{ width: '100%', border: 'none', background: 'transparent', padding: 0 }}
+              aria-label="Background sound volume"
+            />
+          </label>
+        )}
+      </Field>
+    </>
+  );
+}
+
+const AMBIENTS: { id: Ambient; label: string; icon: IconName }[] = [
+  { id: 'off', label: 'Off', icon: 'mute' },
+  { id: 'rain', label: 'Rain', icon: 'drop' },
+  { id: 'cafe', label: 'Café', icon: 'cup' },
+  { id: 'fire', label: 'Fireplace', icon: 'flame' },
+];

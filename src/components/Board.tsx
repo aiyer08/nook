@@ -9,6 +9,8 @@ import { Icon } from './Icons';
 import { imageFromDataTransfer, isUrlLike, normalizeUrl, shrinkImage, toEmbed, unfurl } from '../lib/media';
 import { Empty } from './ui';
 import { DecorLayer } from './Decorations';
+import { HiddenMouse } from './Burrow';
+import { today } from '../lib/dates';
 
 const PAD = 220;
 
@@ -23,6 +25,7 @@ export function Board({ sector }: { sector: Sector }) {
   const setPanel = useUI((s) => s.setPanel);
   const select = useUI((s) => s.select);
   const toast = useUI((s) => s.toast);
+  const hide = useDoc((s) => s.doc.garden.hide);
   const scrollRef = useRef<HTMLDivElement>(null);
   const [dropping, setDropping] = useState(false);
 
@@ -33,6 +36,16 @@ export function Board({ sector }: { sector: Sector }) {
   }, [widgets]);
 
   const drawing = tool !== 'select';
+
+  /**
+   * Once a day the mouse tucks themselves behind a widget. The tail is drawn
+   * here rather than by the burrow because it needs to sit in board
+   * coordinates, just under the card it's hiding behind.
+   */
+  const hidingBehind = useMemo(() => {
+    if (!hide || hide.found || hide.date !== today()) return null;
+    return widgets.find((w) => w.id === hide.widgetId && !w.collapsed) ?? null;
+  }, [hide, widgets]);
 
   /** Paste a screenshot or a link straight onto the page. */
   useEffect(() => {
@@ -130,6 +143,8 @@ export function Board({ sector }: { sector: Sector }) {
             </div>
           </div>
         )}
+
+        {hidingBehind && <HiddenMouse key={`hide-${hidingBehind.id}`} widget={hidingBehind} />}
 
         {widgets.map((w) => (
           <WidgetFrame key={w.id} widget={w} sector={sector} locked={drawing || decorating}>

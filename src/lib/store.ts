@@ -8,6 +8,8 @@ import { uid } from './id';
 import { PASTELS, THEMES } from './themes';
 import { addDays, seasonOf, today, toDateStr } from './dates';
 import { unlockedIds } from './cosmetics';
+import { nextPlot, seedsDue } from './growth';
+import type { Weather } from './weather';
 
 const STORAGE_KEY = 'nook.doc.v2';
 const HISTORY_LIMIT = 80;
@@ -27,6 +29,12 @@ const defaultSettings: Settings = {
   paperTexture: true,
   motion: true,
   confetti: true,
+  weather: false,   // needs a location, so it's opt-in
+  place: null,
+  ambient: 'off',   // unexpected sound makes people close apps
+  ambientVolume: 0.5,
+  lampGlow: true,
+  burrow: true,
 };
 
 /**
@@ -67,7 +75,11 @@ export function emptyDoc(): Doc {
     items: [],
     materials: [],
     settings: defaultSettings,
-    stats: { completed: 0, streak: 0, lastActiveDate: null, unlocked: [], seen: [] },
+    stats: {
+      completed: 0, streak: 0, lastActiveDate: null, unlocked: [], seen: [],
+      focusMinutes: 0, bestStreak: 0,
+    },
+    garden: { seeds: 0, countedCompletions: 0, plants: [], picks: {}, hide: null, foundOn: [] },
     google: { ...defaultGoogle },
   };
 }
@@ -213,6 +225,7 @@ function loadDoc(): Doc | null {
       decorations: parsed.decorations ?? [],
       items: parsed.items ?? [],
       materials: parsed.materials ?? [],
+      garden: { ...emptyDoc().garden, ...(parsed.garden ?? {}) },
       google: {
         ...defaultGoogle,
         ...(parsed.google ?? {}),
@@ -266,17 +279,37 @@ interface Toast {
   kind: 'info' | 'warn' | 'win';
 }
 
+/**
+ * A cozy focus session. Transient on purpose: if the tab closes mid-session
+ * the seedling it planted simply stays a sprout, which is exactly the rule.
+ */
+export interface FocusSession {
+  /** the widget you're working in; everything else dims */
+  widgetId: ID;
+  minutes: number;
+  /** epoch ms when it ends */
+  endsAt: number;
+  /** the seedling planted for the duration */
+  plantId: ID;
+}
+
 interface UIState {
   tool: Tool;
   penColor: string;
   penWidth: number;
   todayOpen: boolean;
-  panel: null | 'settings' | 'avatar' | 'widgets' | 'sectors' | 'calendars';
+  panel: null | 'settings' | 'avatar' | 'widgets' | 'sectors' | 'calendars' | 'garden' | 'wrapped';
   selectedWidget: ID | null;
   dragging: boolean;
   /** arranging tape and stickers: the decor layer comes to the front */
   decorating: boolean;
   toasts: Toast[];
+  /** a task in the mouse's paws, waiting to be carried to another tab */
+  carrying: ID | null;
+  /** the weather outside, fetched once and shared. Never persisted with the doc. */
+  sky: Weather | null;
+  /** a cozy focus session, if one is running */
+  focus: FocusSession | null;
   celebrate: number;      // bumps to fire confetti
   avatarMood: 'idle' | 'happy' | 'cheer' | 'sleepy' | 'stretch';
   moodUntil: number;
@@ -287,6 +320,9 @@ interface UIState {
   select: (id: ID | null) => void;
   setDragging: (v: boolean) => void;
   setDecorating: (v: boolean) => void;
+  setCarrying: (id: ID | null) => void;
+  setSky: (w: Weather | null) => void;
+  setFocus: (f: FocusSession | null) => void;
   toast: (message: string, kind?: Toast['kind']) => void;
   dismiss: (id: string) => void;
   cheer: () => void;
@@ -303,6 +339,9 @@ export const useUI = create<UIState>((set, get) => ({
   dragging: false,
   decorating: false,
   toasts: [],
+  carrying: null,
+  sky: null,
+  focus: null,
   celebrate: 0,
   avatarMood: 'idle',
   moodUntil: 0,
@@ -313,6 +352,9 @@ export const useUI = create<UIState>((set, get) => ({
   select: (selectedWidget) => set({ selectedWidget }),
   setDragging: (dragging) => set({ dragging }),
   setDecorating: (decorating) => set({ decorating }),
+  setCarrying: (carrying) => set({ carrying }),
+  setSky: (sky) => set({ sky }),
+  setFocus: (focus) => set({ focus }),
   toast: (message, kind = 'info') => {
     const id = uid();
     set({ toasts: [...get().toasts, { id, message, kind }] });
@@ -371,6 +413,8 @@ interface DocState {
   removeTask: (id: ID) => void;
   moveTask: (id: ID, delta: number) => void;
   addSubtask: (taskId: ID, title: string) => void;
+  /** hand a task to another tab: the mouse's delivery round */
+  carryTask: (taskId: ID, toSectorId: ID) => boolean;
   updateSubtask: (taskId: ID, subId: ID, patch: Partial<Subtask>) => void;
   removeSubtask: (taskId: ID, subId: ID) => void;
 
@@ -436,6 +480,16 @@ interface DocState {
   setAutoSync: (v: boolean) => void;
 
   /* settings + avatar */
+  /* the garden that grows from what you did */
+  notePick: (flowerId: string) => void;
+  plantSeed: (flowerId: string, from?: string) => boolean;
+  waterPlant: (id: ID) => void;
+  sowSeedling: (flowerId: string, from: string) => ID;
+  finishSeedling: (id: ID, minutes: number) => void;
+  /* the mouse's daily hiding place */
+  hideMouse: (widgetId: ID) => void;
+  findMouse: () => void;
+
   updateSettings: (patch: Partial<Settings>) => void;
   updateAvatar: (patch: Partial<AvatarState>) => void;
 
@@ -696,6 +750,7 @@ export const useDoc = create<DocState>((set, get) => ({
    */
   toggleTask: (id, date) => {
     let becameDone = false;
+    let earnedSeeds = 0;
     get().commit('tick task', (d) => {
       const t = d.tasks.find((x) => x.id === id);
       if (!t) return;
@@ -721,12 +776,29 @@ export const useDoc = create<DocState>((set, get) => ({
         d.stats.streak = last && addDays(last, 1) === date ? d.stats.streak + 1 : 1;
         d.stats.lastActiveDate = date;
       }
+      // the best you ever did, kept separately: a reset to zero shouldn't
+      // erase the fact that it happened
+      d.stats.bestStreak = Math.max(d.stats.bestStreak ?? 0, d.stats.streak);
       d.stats.unlocked = unlockedIds(d.stats.completed, seasonOf());
+
+      // every few finished things is a seed for the garden
+      const due = seedsDue(d.stats.completed, d.garden.countedCompletions);
+      if (due > 0) {
+        d.garden.seeds += due;
+        d.garden.countedCompletions = d.stats.completed;
+        earnedSeeds = due;
+      }
     });
 
     if (becameDone) {
       const ui = useUI.getState();
       ui.setMood('happy');
+      if (earnedSeeds > 0) {
+        ui.toast(
+          earnedSeeds === 1 ? 'A seed for the garden 🌱' : `${earnedSeeds} seeds for the garden 🌱`,
+          'win',
+        );
+      }
     }
   },
 
@@ -757,6 +829,33 @@ export const useDoc = create<DocState>((set, get) => ({
       const t = d.tasks.find((x) => x.id === taskId);
       if (t) t.subtasks.push({ id: uid(), title, done: false });
     }),
+
+  /**
+   * Move a task to another tab. Tasks belong to a widget, so this finds a
+   * to-do list on the far side and makes one if the tab hasn't got one — the
+   * delivery shouldn't fail because the destination is empty.
+   */
+  carryTask: (taskId, toSectorId) => {
+    const state = get();
+    const task = state.doc.tasks.find((t) => t.id === taskId);
+    if (!task || task.sectorId === toSectorId) return false;
+
+    let target = state.doc.widgets
+      .filter((w) => w.sectorId === toSectorId && (w.type === 'todo' || w.type === 'habits'))
+      .sort((a, b) => a.z - b.z)[0]?.id;
+    if (!target) target = state.addWidget(toSectorId, 'todo');
+
+    get().commit('carry a task over', (d) => {
+      const t = d.tasks.find((x) => x.id === taskId);
+      if (!t) return;
+      t.sectorId = toSectorId;
+      t.widgetId = target as ID;
+      // to the bottom of its new list, so it doesn't shove anything aside
+      const siblings = d.tasks.filter((x) => x.widgetId === target);
+      t.order = siblings.reduce((m, x) => Math.max(m, x.order), -1) + 1;
+    });
+    return true;
+  },
 
   updateSubtask: (taskId, subId, patch) =>
     get().commit('edit step', (d) => {
@@ -1093,6 +1192,70 @@ export const useDoc = create<DocState>((set, get) => ({
     }),
 
   setAutoSync: (v) => get().quiet((d) => { d.google.autoSync = v; }),
+
+  /* ---- the garden ---- */
+
+  notePick: (flowerId) =>
+    get().quiet((d) => {
+      d.garden.picks[flowerId] = (d.garden.picks[flowerId] ?? 0) + 1;
+    }),
+
+  plantSeed: (flowerId, from = 'a handful of finished things') => {
+    if (get().doc.garden.seeds <= 0) return false;
+    get().commit('plant a seed', (d) => {
+      d.garden.seeds -= 1;
+      d.garden.plants.push({
+        id: uid(), flowerId, plantedOn: today(), from,
+        slot: nextPlot(d.garden.plants), watered: [],
+      });
+    });
+    return true;
+  },
+
+  waterPlant: (id) =>
+    get().commit('water the garden', (d) => {
+      const p = d.garden.plants.find((x) => x.id === id);
+      if (!p) return;
+      const t = today();
+      if (!p.watered.includes(t)) p.watered.push(t);
+    }, { merge: true, key: `water:${id}` }),
+
+  /**
+   * A focus session plants its seedling at the *start*, so you watch it while
+   * you work. It's marked stunted until the timer runs out.
+   */
+  sowSeedling: (flowerId, from) => {
+    const id = uid();
+    get().quiet((d) => {
+      d.garden.plants.push({
+        id, flowerId, plantedOn: today(), from,
+        slot: nextPlot(d.garden.plants), watered: [], stunted: true,
+      });
+    });
+    return id;
+  },
+
+  finishSeedling: (id, minutes) =>
+    get().quiet((d) => {
+      const p = d.garden.plants.find((x) => x.id === id);
+      if (p) delete p.stunted;
+      d.stats.focusMinutes += Math.max(0, Math.round(minutes));
+    }),
+
+  /* ---- hide and seek ---- */
+
+  hideMouse: (widgetId) =>
+    get().quiet((d) => { d.garden.hide = { date: today(), widgetId, found: false }; }),
+
+  findMouse: () =>
+    get().quiet((d) => {
+      if (!d.garden.hide || d.garden.hide.found) return;
+      d.garden.hide.found = true;
+      const t = d.garden.hide.date;
+      if (!d.garden.foundOn.includes(t)) d.garden.foundOn.push(t);
+      // finding them is worth a seed. Cheap, and it's the reason to look.
+      d.garden.seeds += 1;
+    }),
 
   updateSettings: (patch) =>
     get().commit('change settings', (d) => { d.settings = { ...d.settings, ...patch }; }),

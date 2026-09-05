@@ -1,8 +1,123 @@
 /** Shared chunky building blocks: checkbox, panel, modal, empty states. */
 import { AnimatePresence, motion } from 'framer-motion';
-import { useEffect, useId, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
+import { createPortal } from 'react-dom';
 import { Icon, type IconName } from './Icons';
 import { useUI } from '../lib/store';
+
+/* ---------------- popovers that escape their box ---------------- */
+
+/**
+ * A dropdown that can't be clipped.
+ *
+ * Widget bodies and panels scroll, so a menu positioned inside one gets cut
+ * off the moment it's taller than the space left below its button. This
+ * renders into `document.body` instead and positions itself from the trigger's
+ * on-screen rectangle — which also lets it flip upwards near the bottom of the
+ * window and slide sideways rather than run off the edge.
+ *
+ * Wrap a trigger and a menu:
+ *
+ *   const anchor = useRef<HTMLButtonElement>(null);
+ *   <button ref={anchor} onClick={...} />
+ *   <Popover open={open} anchor={anchor} onClose={...}>…</Popover>
+ */
+export function Popover({
+  open, anchor, onClose, children, minWidth = 155, width, align = 'left',
+}: {
+  open: boolean;
+  anchor: React.RefObject<HTMLElement | null>;
+  onClose: () => void;
+  children: ReactNode;
+  minWidth?: number;
+  /** fix the width when the contents would otherwise stretch */
+  width?: number;
+  align?: 'left' | 'right';
+}) {
+  const box = useRef<HTMLDivElement | null>(null);
+  const [at, setAt] = useState<{ left: number; top: number; maxHeight: number } | null>(null);
+
+  const place = useCallback(() => {
+    const trigger = anchor.current;
+    if (!trigger) return;
+    const r = trigger.getBoundingClientRect();
+    const gap = 5;
+    const margin = 8;
+    const w = width ?? Math.max(minWidth, box.current?.offsetWidth ?? minWidth);
+    const height = box.current?.offsetHeight ?? 0;
+
+    const below = window.innerHeight - r.bottom - gap - margin;
+    const above = r.top - gap - margin;
+    // open downwards unless there's genuinely more room the other way
+    const flip = height > below && above > below;
+    const maxHeight = Math.max(120, flip ? above : below);
+
+    let left = align === 'right' ? r.right - w : r.left;
+    left = Math.min(Math.max(margin, left), Math.max(margin, window.innerWidth - w - margin));
+    const top = flip ? Math.max(margin, r.top - gap - Math.min(height, maxHeight)) : r.bottom + gap;
+    setAt({ left, top, maxHeight });
+  }, [anchor, align, minWidth, width]);
+
+  useLayoutEffect(() => {
+    if (!open) { setAt(null); return; }
+    place();
+    // measure once more after the menu has actually rendered, so flipping and
+    // clamping use its real size rather than the minimum
+    const raf = requestAnimationFrame(place);
+    return () => cancelAnimationFrame(raf);
+  }, [open, place]);
+
+  useEffect(() => {
+    if (!open) return;
+    const away = (e: MouseEvent) => {
+      const target = e.target as Node;
+      if (box.current?.contains(target) || anchor.current?.contains(target)) return;
+      onClose();
+    };
+    const key = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    // any scroll or resize moves the trigger, so follow it
+    window.addEventListener('mousedown', away);
+    window.addEventListener('keydown', key);
+    window.addEventListener('scroll', place, true);
+    window.addEventListener('resize', place);
+    return () => {
+      window.removeEventListener('mousedown', away);
+      window.removeEventListener('keydown', key);
+      window.removeEventListener('scroll', place, true);
+      window.removeEventListener('resize', place);
+    };
+  }, [open, onClose, place, anchor]);
+
+  if (!open || typeof document === 'undefined') return null;
+
+  return createPortal(
+    <motion.div
+      ref={box}
+      className="card"
+      initial={{ opacity: 0, y: -4, scale: 0.98 }}
+      animate={{ opacity: 1, y: 0, scale: 1 }}
+      transition={{ type: 'spring', stiffness: 500, damping: 34 }}
+      onPointerDown={(e) => e.stopPropagation()}
+      style={{
+        position: 'fixed',
+        left: at?.left ?? -9999,
+        top: at?.top ?? -9999,
+        minWidth,
+        width,
+        maxHeight: at?.maxHeight,
+        overflowY: 'auto',
+        padding: 7,
+        background: 'var(--bg)',
+        // above panels and widgets alike
+        zIndex: 9800,
+        visibility: at ? 'visible' : 'hidden',
+      }}
+    >
+      {children}
+    </motion.div>,
+    document.body,
+  );
+}
 
 /* ---------------- checkbox ---------------- */
 

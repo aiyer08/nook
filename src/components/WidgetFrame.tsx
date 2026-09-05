@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useRef, useState, type ReactNode } from 'react';
 import { motion } from 'framer-motion';
 import { Icon } from './Icons';
 import { GRID, useDoc, useUI } from '../lib/store';
@@ -6,6 +6,9 @@ import type { Sector, Widget } from '../lib/types';
 import { PASTELS, readableOn } from '../lib/themes';
 import { seedFrom, wobblyRect } from '../lib/ink';
 import { play } from '../lib/sound';
+import { Popover } from './ui';
+import { FocusStart } from './Focus';
+import { SnowCap } from './Sky';
 
 const MIN_W = 220;
 const MIN_H = 140;
@@ -28,12 +31,15 @@ export function WidgetFrame({ widget, sector, children, locked }: Props) {
   const selected = useUI((s) => s.selectedWidget === widget.id);
   const select = useUI((s) => s.select);
   const setDragging = useUI((s) => s.setDragging);
+  const focus = useUI((s) => s.focus);
+  const sky = useUI((s) => s.sky);
 
   const [drag, setDrag] = useState<{ x: number; y: number } | null>(null);
   const [size, setSize] = useState<{ w: number; h: number } | null>(null);
   const [menu, setMenu] = useState(false);
   const [editingTitle, setEditingTitle] = useState(false);
-  const menuRef = useRef<HTMLDivElement>(null);
+  const [focusAsk, setFocusAsk] = useState(false);
+  const menuBtn = useRef<HTMLButtonElement>(null);
 
   const accent = widget.accent ?? sector.accent;
   const x = drag?.x ?? widget.x;
@@ -42,14 +48,13 @@ export function WidgetFrame({ widget, sector, children, locked }: Props) {
   const h = size?.h ?? widget.h;
   const active = drag !== null || size !== null;
 
-  useEffect(() => {
-    if (!menu) return;
-    const close = (e: MouseEvent) => {
-      if (!menuRef.current?.contains(e.target as Node)) setMenu(false);
-    };
-    window.addEventListener('mousedown', close);
-    return () => window.removeEventListener('mousedown', close);
-  }, [menu]);
+  /**
+   * Cozy focus dims the page around one widget. Doing it per-card rather than
+   * with a cut-out overlay keeps the focused widget completely crisp — text
+   * through a hole in a scrim always looks slightly wrong.
+   */
+  const focused = focus?.widgetId === widget.id;
+  const dimmed = Boolean(focus) && !focused;
 
   const snap = (v: number) => (sector.snap ? Math.round(v / GRID) * GRID : Math.round(v));
 
@@ -125,8 +130,9 @@ export function WidgetFrame({ widget, sector, children, locked }: Props) {
       onPointerDownCapture={() => { if (!locked) raiseWidget(widget.id); }}
       animate={{
         // pick-up: a small lift so it feels like you actually grabbed it
-        scale: active ? 1.03 : 1,
+        scale: active ? 1.03 : focused ? 1.015 : 1,
         rotate: active ? 0 : widget.rotation,
+        opacity: dimmed ? 0.28 : 1,
       }}
       transition={{ type: 'spring', stiffness: 520, damping: 34 }}
       style={{
@@ -135,7 +141,7 @@ export function WidgetFrame({ widget, sector, children, locked }: Props) {
         top: y,
         width: w,
         height: widget.collapsed ? undefined : h,
-        zIndex: active ? 999 : widget.z,
+        zIndex: active ? 999 : focused ? 998 : widget.z,
         background: 'var(--surface)',
         // with wobble on, the real edge is the SVG below; this keeps the box
         // the same size so nothing shifts when you toggle it
@@ -145,8 +151,11 @@ export function WidgetFrame({ widget, sector, children, locked }: Props) {
         display: 'flex',
         flexDirection: 'column',
         overflow: 'visible',
-        outline: selected && !active ? `3px solid ${accent}` : 'none',
+        outline: focused ? '3px solid var(--accent)' : selected && !active ? `3px solid ${accent}` : 'none',
         outlineOffset: 3,
+        // dimmed cards shouldn't swallow clicks meant for the focused one
+        pointerEvents: dimmed ? 'none' : undefined,
+        filter: dimmed ? 'saturate(0.55)' : undefined,
       }}
       aria-label={widget.title}
     >
@@ -170,6 +179,9 @@ export function WidgetFrame({ widget, sector, children, locked }: Props) {
           />
         </svg>
       )}
+
+      {/* snow, if it's actually snowing where you are */}
+      {sky?.sky === 'snow' && !widget.collapsed && <SnowCap width={w} />}
 
       {/* washi tape */}
       {widget.tape !== 'none' && (
@@ -236,8 +248,9 @@ export function WidgetFrame({ widget, sector, children, locked }: Props) {
           <Icon name={widget.collapsed ? 'chevronDown' : 'chevronUp'} size={15} />
         </button>
 
-        <div style={{ position: 'relative' }} ref={menuRef}>
+        <div style={{ position: 'relative' }}>
           <button
+            ref={menuBtn}
             className="btn ghost tiny"
             onPointerDown={(e) => e.stopPropagation()}
             onClick={() => setMenu((m) => !m)}
@@ -247,15 +260,12 @@ export function WidgetFrame({ widget, sector, children, locked }: Props) {
           >
             <Icon name="dots" size={15} />
           </button>
-          {menu && (
-            <div
-              className="card"
-              onPointerDown={(e) => e.stopPropagation()}
-              style={{
-                position: 'absolute', right: 0, top: 'calc(100% + 8px)', width: 214,
-                padding: 10, zIndex: 200, background: 'var(--bg)',
-              }}
-            >
+          {/*
+            Portalled rather than absolute: a widget near the bottom of the
+            board would otherwise have its menu clipped by the board's scroll.
+          */}
+          <Popover open={menu} anchor={menuBtn} onClose={() => setMenu(false)} width={214} align="right">
+            <div>
               <MenuLabel>Colour</MenuLabel>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5, marginBottom: 8 }}>
                 <button
@@ -312,6 +322,13 @@ export function WidgetFrame({ widget, sector, children, locked }: Props) {
               <button
                 className="btn ghost tiny"
                 style={{ width: '100%', justifyContent: 'flex-start' }}
+                onClick={() => { setFocusAsk(true); setMenu(false); }}
+              >
+                <Icon name="timer" size={14} /> Cozy focus
+              </button>
+              <button
+                className="btn ghost tiny"
+                style={{ width: '100%', justifyContent: 'flex-start' }}
                 onClick={() => { duplicateWidget(widget.id); setMenu(false); }}
               >
                 <Icon name="copy" size={14} /> Duplicate
@@ -334,7 +351,7 @@ export function WidgetFrame({ widget, sector, children, locked }: Props) {
                 Removing is undoable — ⌘Z brings it right back.
               </p>
             </div>
-          )}
+          </Popover>
         </div>
       </header>
 
@@ -376,6 +393,7 @@ export function WidgetFrame({ widget, sector, children, locked }: Props) {
           </svg>
         </button>
       )}
+      <FocusStart widgetId={widget.id} open={focusAsk} onClose={() => setFocusAsk(false)} />
     </motion.section>
   );
 }

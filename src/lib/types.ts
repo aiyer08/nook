@@ -443,6 +443,15 @@ export interface Decoration {
   color?: string;
 }
 
+export type Ambient = 'off' | 'rain' | 'cafe' | 'fire';
+
+/** Where to ask the weather about. Kept coarse on purpose — a town, not a street. */
+export interface Place {
+  lat: number;
+  lon: number;
+  label: string;
+}
+
 export interface Settings {
   themeId: string;
   /** one setting, changing how every pen stroke is drawn */
@@ -456,6 +465,16 @@ export interface Settings {
   paperTexture: boolean;
   motion: boolean;
   confetti: boolean;
+  /** real weather from outside, drawn on the paper */
+  weather: boolean;
+  place: Place | null;
+  /** a looping background sound. Off by default, always. */
+  ambient: Ambient;
+  ambientVolume: number;
+  /** a warm pool of lamplight over the page after dark */
+  lampGlow: boolean;
+  /** the mouse's burrow in the corner of the page */
+  burrow: boolean;
 }
 
 export interface Stats {
@@ -464,6 +483,47 @@ export interface Stats {
   lastActiveDate: DateStr | null;
   unlocked: string[];
   seen: string[];
+  /** minutes spent in cozy focus, all time */
+  focusMinutes: number;
+  /** the single best streak you ever had, which a reset can never take back */
+  bestStreak: number;
+}
+
+/**
+ * One thing you grew.
+ *
+ * A streak is a receipt and a garden is a photo album: nothing here is ever
+ * removed because a day went badly. A plant's stage is *derived* from the date
+ * it went in and the days you watered it, so it keeps growing while the app is
+ * closed and can't be faked by fiddling with a counter.
+ */
+export interface Plant {
+  id: ID;
+  /** which of the eleven flowers it grew into */
+  flowerId: string;
+  plantedOn: DateStr;
+  /** what earned the seed, in a few words, for the label on the stick */
+  from: string;
+  /** position in the bed */
+  slot: number;
+  /** the days you watered it; each one is worth a day of growth */
+  watered: DateStr[];
+  /** a focus seedling whose session was cut short. Stays a sprout, no scolding. */
+  stunted?: boolean;
+}
+
+export interface GardenState {
+  /** seeds you've earned and not yet planted */
+  seeds: number;
+  /** completions already paid out as seeds, so seeds can't be double-counted */
+  countedCompletions: number;
+  plants: Plant[];
+  /** how many times you've planted from each flower — your most-used folder */
+  picks: Record<string, number>;
+  /** where the mouse is hiding today, and whether you found them */
+  hide: { date: DateStr; widgetId: ID; found: boolean } | null;
+  /** every day you found the mouse — one sticker each */
+  foundOn: DateStr[];
 }
 
 /** Everything that gets saved + everything undo/redo travels over. */
@@ -485,5 +545,6 @@ export interface Doc {
   materials: Material[];
   settings: Settings;
   stats: Stats;
+  garden: GardenState;
   google: GoogleState;
 }

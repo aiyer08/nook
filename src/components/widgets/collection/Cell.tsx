@@ -5,6 +5,7 @@ import type { CellValue, FieldDef } from '../../../lib/types';
 import { Icon } from '../../Icons';
 import { optionColor } from '../../../lib/collections';
 import { readableOn } from '../../../lib/themes';
+import { Popover } from '../../ui';
 
 interface Props {
   field: FieldDef;
@@ -189,20 +190,16 @@ function Stars({ value, max, onChange }: { value: number; max: number; onChange:
 
 function SelectCell({ field, value, onChange, dense }: Props) {
   const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLSpanElement>(null);
-  useEffect(() => {
-    if (!open) return;
-    const close = (e: MouseEvent) => { if (!ref.current?.contains(e.target as Node)) setOpen(false); };
-    window.addEventListener('mousedown', close);
-    return () => window.removeEventListener('mousedown', close);
-  }, [open]);
+  // the menu is portalled out of the widget, so the trigger is the anchor
+  const trigger = useRef<HTMLButtonElement>(null);
 
   const current = field.options?.find((o) => o.id === value);
   const color = current?.color;
 
   return (
-    <span ref={ref} style={{ position: 'relative', display: 'inline-block' }}>
+    <span style={{ display: 'inline-block' }}>
       <button
+        ref={trigger}
         onClick={() => setOpen((v) => !v)}
         aria-label={field.name}
         aria-expanded={open}
@@ -219,41 +216,33 @@ function SelectCell({ field, value, onChange, dense }: Props) {
         {current?.label ?? field.name}
         <Icon name="chevronDown" size={11} />
       </button>
-      {open && (
-        <span
-          className="card"
-          style={{
-            position: 'absolute', left: 0, top: 'calc(100% + 5px)', zIndex: 60,
-            padding: 7, minWidth: 155, background: 'var(--bg)', display: 'block',
-          }}
-        >
-          {field.options?.map((o) => (
-            <button
-              key={o.id}
-              onClick={() => { onChange(o.id === value ? undefined : o.id); setOpen(false); }}
-              style={{
-                display: 'flex', alignItems: 'center', gap: 7, width: '100%', textAlign: 'left',
-                padding: '5px 7px', borderRadius: 9, border: 'none',
-                background: o.id === value ? 'var(--accent-tint)' : 'transparent',
-                fontSize: 12.5, fontWeight: 600,
-              }}
-            >
-              <span style={{ width: 11, height: 11, borderRadius: 4, background: o.color, border: '1.5px solid var(--line)' }} />
-              {o.label}
-            </button>
-          ))}
+      <Popover open={open} anchor={trigger} onClose={() => setOpen(false)}>
+        {field.options?.map((o) => (
           <button
-            onClick={() => { onChange(undefined); setOpen(false); }}
+            key={o.id}
+            onClick={() => { onChange(o.id === value ? undefined : o.id); setOpen(false); }}
             style={{
-              display: 'block', width: '100%', textAlign: 'left', padding: '5px 7px',
-              borderRadius: 9, border: 'none', background: 'transparent',
-              fontSize: 12, color: 'var(--ink-faint)',
+              display: 'flex', alignItems: 'center', gap: 7, width: '100%', textAlign: 'left',
+              padding: '5px 7px', borderRadius: 9, border: 'none',
+              background: o.id === value ? 'var(--accent-tint)' : 'transparent',
+              fontSize: 12.5, fontWeight: 600,
             }}
           >
-            Clear
+            <span style={{ width: 11, height: 11, borderRadius: 4, background: o.color, border: '1.5px solid var(--line)' }} />
+            {o.label}
           </button>
-        </span>
-      )}
+        ))}
+        <button
+          onClick={() => { onChange(undefined); setOpen(false); }}
+          style={{
+            display: 'block', width: '100%', textAlign: 'left', padding: '5px 7px',
+            borderRadius: 9, border: 'none', background: 'transparent',
+            fontSize: 12, color: 'var(--ink-faint)',
+          }}
+        >
+          Clear
+        </button>
+      </Popover>
     </span>
   );
 }

@@ -285,6 +285,11 @@ export function seasonalShift(season: Season): { saturate: number; lighten: numb
 }
 
 /** Does this flower match what's being typed? */
+export function flowerById(id: string): Flower | undefined {
+  return GARDEN.find((f) => f.id === id);
+}
+
+/** Which flower a catalogue key is filed under. */
 export function flowerMatches(flower: Flower, query: string, entries: Entry[]): boolean {
   const q = query.trim().toLowerCase();
   if (!q) return true;

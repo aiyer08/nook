@@ -32,6 +32,7 @@ export function GardenPicker({ open, onClose }: { open: boolean; onClose: () => 
   const updateWidget = useDoc((s) => s.updateWidget);
   const addItem = useDoc((s) => s.addItem);
   const addItemStep = useDoc((s) => s.addItemStep);
+  const notePick = useDoc((s) => s.notePick);
   const sound = useDoc((s) => s.doc.settings.sound);
   const motionOn = useDoc((s) => s.doc.settings.motion);
   const toast = useUI((s) => s.toast);
@@ -116,6 +117,10 @@ export function GardenPicker({ open, onClose }: { open: boolean; onClose: () => 
       const rowId = addItem(id, activeId, group && first ? { [group.id]: first } : {});
       for (const step of entry.checklist ?? []) addItemStep(rowId, step);
     }
+    // remember which flower you reached for — it's what Wrapped reads back
+    const home = homeFlowerOf(entry.key);
+    if (home) notePick(home.id);
+
     play('pop', sound);
     toast(`Planted ${entry.label} in ${sector?.name ?? 'this page'}.`);
     onClose();

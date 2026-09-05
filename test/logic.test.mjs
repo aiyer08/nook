@@ -9,6 +9,11 @@ import { streaks, gridDays, yearDays, correlation, describeCorrelation } from '.
 import { identify, fromDataCiteAttrs } from '../src/lib/papers.ts';
 import { CATALOGUE } from '../src/lib/catalogue.ts';
 import { GARDEN, FAVOURITES, homeFlowerOf } from '../src/lib/garden.ts';
+import {
+  SEED_EVERY, canWater, daysToNextStage, growthDays, nextPlot, seedsDue, stageOf, towardNextSeed,
+} from '../src/lib/growth.ts';
+import { skyFromCode } from '../src/lib/weather.ts';
+import { completionDates, describeWeek, weekStart, wrapUp } from '../src/lib/wrapped.ts';
 
 let pass = 0;
 const t = (name, fn) => { fn(); pass++; console.log('  ok  ' + name); };
@@ -461,6 +466,188 @@ t('the eleven are actually eleven different flowers', () => {
   }
   const species = new Set(GARDEN.map((f) => f.species.toLowerCase()));
   assert.equal(species.size, 11, 'two flowers share a species');
+});
+
+/* ------------------------------------------------------------------ */
+
+console.log('\nthe garden grows');
+
+const plant = (o) => ({
+  id: 'p', flowerId: 'daisy', plantedOn: '2026-09-01', from: 'test', slot: 0, watered: [], ...o,
+});
+
+t('a plant grows from the day it went in, not a stored counter', () => {
+  const p = plant({ plantedOn: '2026-09-01' });
+  assert.equal(growthDays(p, '2026-09-01'), 0);
+  assert.equal(growthDays(p, '2026-09-15'), 14);
+  // closing the app for a fortnight still grows it
+  assert.equal(stageOf(p, '2026-09-01'), 0);
+  assert.equal(stageOf(p, '2026-09-04'), 1);
+  assert.equal(stageOf(p, '2026-09-08'), 2);
+  assert.equal(stageOf(p, '2026-09-15'), 3);
+  assert.equal(stageOf(p, '2026-09-23'), 4);
+});
+
+t('watering is worth a day, and only once a day', () => {
+  const p = plant({ plantedOn: '2026-09-01', watered: ['2026-09-02', '2026-09-02', '2026-09-03'] });
+  // two distinct days of watering, not three waterings
+  assert.equal(growthDays(p, '2026-09-04'), 3 + 2);
+  assert.equal(canWater(plant({ watered: ['2026-09-04'] }), '2026-09-04'), false);
+  assert.equal(canWater(plant({ watered: [] }), '2026-09-04'), true);
+});
+
+t('a fully grown flower needs no more water', () => {
+  const grown = plant({ plantedOn: '2026-01-01' });
+  assert.equal(stageOf(grown, '2026-09-04'), 4);
+  assert.equal(canWater(grown, '2026-09-04'), false);
+  assert.equal(daysToNextStage(grown, '2026-09-04'), null);
+});
+
+t('a focus session left early stays a sprout, and never dies', () => {
+  const stunted = plant({ plantedOn: '2026-01-01', stunted: true });
+  assert.equal(stageOf(stunted, '2026-09-04'), 1);
+  assert.equal(daysToNextStage(stunted, '2026-09-04'), null);
+});
+
+t('seeds are paid out once per handful of finished things', () => {
+  assert.equal(SEED_EVERY, 5);
+  assert.equal(seedsDue(4, 0), 0);
+  assert.equal(seedsDue(5, 0), 1);
+  assert.equal(seedsDue(12, 0), 2);
+  // already paid for the first ten
+  assert.equal(seedsDue(12, 10), 0);
+  assert.equal(seedsDue(15, 10), 1);
+  // a counter that somehow went backwards can't mint seeds
+  assert.equal(seedsDue(3, 10), 0);
+});
+
+t('the progress line counts toward the next seed', () => {
+  assert.deepEqual(towardNextSeed(7), { done: 2, need: 5 });
+});
+
+t('the bed fills gaps rather than growing forever', () => {
+  assert.equal(nextPlot([]), 0);
+  assert.equal(nextPlot([plant({ slot: 0 }), plant({ slot: 2 })]), 1);
+  assert.equal(nextPlot([plant({ slot: 0 }), plant({ slot: 1 })]), 2);
+});
+
+console.log('\nweather codes');
+t('WMO codes collapse to what we can draw', () => {
+  assert.equal(skyFromCode(0), 'clear');
+  assert.equal(skyFromCode(3), 'cloud');
+  assert.equal(skyFromCode(45), 'fog');
+  assert.equal(skyFromCode(61), 'rain');
+  assert.equal(skyFromCode(80), 'rain');
+  assert.equal(skyFromCode(73), 'snow');
+  assert.equal(skyFromCode(85), 'snow');
+  assert.equal(skyFromCode(95), 'storm');
+  // anything unexpected is cloudy rather than a crash
+  assert.equal(skyFromCode(999), 'cloud');
+});
+
+console.log('\nwrapped');
+
+const wdoc = () => ({
+  version: 2, onboarded: true,
+  avatar: { species: 'mouse', name: 'Mochi', color: '#fff', hat: 'none', accessory: 'none', decor: [] },
+  sectors: [{ id: 's', name: 'School', accent: '#ccc', icon: 'book', order: 0, snap: true }],
+  activeSectorId: 's',
+  widgets: [{
+    id: 'w1', sectorId: 's', type: 'tracker', title: 'Mood', x: 0, y: 0, w: 1, h: 1, z: 1,
+    rotation: 0, tape: 'none',
+    data: { mode: 'mood', days: { '2026-03-02': { mood: 5 }, '2026-03-03': { mood: 3 }, '2025-05-05': { mood: 1 } } },
+  }],
+  tasks: [
+    task({ id: 't1', done: true, completedOn: '2026-03-02' }),
+    task({ id: 't2', done: true, completedOn: '2026-03-03' }),
+    task({ id: 't3', done: true, completedOn: '2026-03-04' }),
+    task({ id: 't4', recurrence: { kind: 'daily' }, completions: ['2026-03-02', '2026-07-09'] }),
+    task({ id: 't5', done: true, completedOn: '2025-12-31' }),
+    task({ id: 't6' }),
+  ],
+  events: [], goals: [], contacts: [], strokes: [], decorations: [], items: [], materials: [],
+  settings: {},
+  stats: { completed: 6, streak: 3, lastActiveDate: '2026-03-04', unlocked: [], seen: [], focusMinutes: 125, bestStreak: 9 },
+  garden: {
+    seeds: 1, countedCompletions: 5,
+    plants: [plant({ id: 'g1', plantedOn: '2026-01-01' }), plant({ id: 'g2', slot: 1, plantedOn: '2026-09-01' })],
+    picks: { rose: 4, daisy: 9 }, hide: null, foundOn: ['2026-03-02', '2026-03-03'],
+  },
+  google: { clientId: '', links: [], pendingDeletes: [], autoSync: false },
+});
+
+t('only this year is counted, and recurring ticks count too', () => {
+  const dates = completionDates(wdoc(), 2026);
+  assert.deepEqual(dates.sort(), ['2026-03-02', '2026-03-02', '2026-03-03', '2026-03-04', '2026-07-09']);
+  assert.equal(completionDates(wdoc(), 2025).length, 1);
+});
+
+t('the week starts on Monday', () => {
+  assert.equal(weekStart('2026-03-04'), '2026-03-02');   // a Wednesday
+  assert.equal(weekStart('2026-03-02'), '2026-03-02');   // the Monday itself
+  assert.equal(weekStart('2026-03-01'), '2026-02-23');   // a Sunday belongs to the week before
+});
+
+t('wrapped adds up the year', () => {
+  const w = wrapUp(wdoc(), 2026, '2026-09-04');
+  assert.equal(w.completed, 5);
+  assert.equal(w.activeDays, 4);
+  assert.equal(w.bestStreak, 3);                       // 2, 3 and 4 March
+  assert.equal(w.perMonth[2], 4);                      // March
+  assert.equal(w.perMonth[6], 1);                      // July
+  assert.equal(w.busiestWeek.start, '2026-03-02');
+  assert.equal(w.busiestWeek.count, 4);
+  assert.equal(w.busiestDay.date, '2026-03-02');
+  assert.equal(w.topSector.name, 'School');
+});
+
+t('the best streak ever survives a worse year', () => {
+  const w = wrapUp(wdoc(), 2026, '2026-09-04');
+  assert.equal(w.bestStreakEver, 9);
+  assert.ok(w.bestStreakEver >= w.bestStreak);
+});
+
+t('mood only counts the year asked for, and stops at today', () => {
+  const w = wrapUp(wdoc(), 2026, '2026-09-04');
+  assert.equal(w.moodDays, 2);
+  assert.equal(w.mood.length, 247);                    // 1 Jan to 4 Sep inclusive
+  assert.equal(w.mood.at(-1).date, '2026-09-04');
+  assert.equal(w.mood.find((d) => d.date === '2026-03-02').mood, 5);
+  assert.equal(w.mood.find((d) => d.date === '2026-03-05').mood, null);
+  assert.equal(w.moodAverage, 4);
+});
+
+t('a finished year runs to the last day of December', () => {
+  const w = wrapUp(wdoc(), 2025, '2026-09-04');
+  assert.equal(w.mood.length, 365);
+  assert.equal(w.mood.at(-1).date, '2025-12-31');
+});
+
+t('the most-used flower comes from what you actually planted from', () => {
+  const w = wrapUp(wdoc(), 2026, '2026-09-04');
+  assert.equal(w.topFlower.id, 'daisy');
+  assert.equal(w.topFlower.count, 9);
+});
+
+t('the garden and the quiet numbers come through', () => {
+  const w = wrapUp(wdoc(), 2026, '2026-09-04');
+  assert.equal(w.plants, 2);
+  assert.equal(w.blooms, 1);                           // the January one only
+  assert.equal(w.focusMinutes, 125);
+  assert.equal(w.mouseFound, 2);
+});
+
+t('an empty year says so instead of pretending', () => {
+  const w = wrapUp(wdoc(), 2024, '2026-09-04');
+  assert.equal(w.completed, 0);
+  assert.ok(w.thin);
+  assert.equal(w.busiestWeek, null);
+  assert.equal(w.moodAverage, null);
+});
+
+t('the busiest week reads like a date', () => {
+  assert.equal(describeWeek({ start: '2026-03-02', count: 4 }), '2–8 March');
+  assert.equal(describeWeek({ start: '2026-03-30', count: 2 }), '30 March – 5 April');
 });
 
 console.log(`\n${pass} checks passed\n`);

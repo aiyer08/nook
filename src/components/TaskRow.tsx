@@ -10,6 +10,8 @@ import {
 } from '../lib/dates';
 import { play } from '../lib/sound';
 import { Reckoning } from './Reckoning';
+import { TASK_DRAG } from '../lib/dnd';
+import { minutesForEffort, useStartFocus } from './Focus';
 
 /**
  * Warm about failure — never a red "3 DAYS OVERDUE".
@@ -45,6 +47,12 @@ export function TaskRow({ task, date, accent, sectorName, dense }: Props) {
   const settings = useDoc((s) => s.doc.settings);
   const cheer = useUI((s) => s.cheer);
   const setMood = useUI((s) => s.setMood);
+  const setCarrying = useUI((s) => s.setCarrying);
+  const carrying = useUI((s) => s.carrying);
+  const toast = useUI((s) => s.toast);
+  const avatarName = useDoc((s) => s.doc.avatar.name);
+  const burrowOn = useDoc((s) => s.doc.settings.burrow);
+  const startFocus = useStartFocus();
 
   const [open, setOpen] = useState(false);
   const [sub, setSub] = useState('');
@@ -82,7 +90,19 @@ export function TaskRow({ task, date, accent, sectorName, dense }: Props) {
         marginBottom: 4,
       }}
     >
-      <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
+      {/*
+        Drag the row onto the mouse's burrow and they'll carry it to whichever
+        tab you open next. `draggable` sits on this inner div rather than the
+        list item so framer-motion's own drag props stay out of the way.
+      */}
+      <div
+        draggable={!open}
+        onDragStart={(e) => {
+          e.dataTransfer.setData(TASK_DRAG, task.id);
+          e.dataTransfer.effectAllowed = 'move';
+        }}
+        style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}
+      >
         <div style={{ paddingTop: 1 }}>
           <Checkbox checked={done} onChange={tick} accent={accent} size={dense ? 23 : 26} label={task.title} />
         </div>
@@ -260,6 +280,34 @@ export function TaskRow({ task, date, accent, sectorName, dense }: Props) {
                   aria-label="Add a step"
                   style={{ width: '100%', padding: '5px 10px', fontSize: 13, borderWidth: 2, borderStyle: 'dashed' }}
                 />
+              </div>
+
+              <div style={{ display: 'flex', gap: 7, flexWrap: 'wrap' }}>
+                <button
+                  className="btn tiny"
+                  onClick={() => startFocus(task.widgetId, minutesForEffort(task.effort))}
+                  title={`Dim everything else and work on this for ${minutesForEffort(task.effort)} minutes`}
+                >
+                  <Icon name="timer" size={13} /> Focus {minutesForEffort(task.effort)}m
+                </button>
+                {burrowOn && (
+                  <button
+                    className={`btn tiny ${carrying === task.id ? 'primary' : ''}`}
+                    onClick={() => {
+                      if (carrying === task.id) {
+                        setCarrying(null);
+                        toast(`${avatarName} put it back down.`);
+                      } else {
+                        setCarrying(task.id);
+                        toast(`${avatarName} has it. Open another tab to send it there.`);
+                      }
+                    }}
+                    title={`Hand it to ${avatarName} to carry to another tab`}
+                  >
+                    <Icon name="paw" size={13} />
+                    {carrying === task.id ? 'Put it back' : `Give to ${avatarName}`}
+                  </button>
+                )}
               </div>
 
               <TaskControls task={task} />

@@ -17,6 +17,7 @@ export function TopBar() {
   const past = useDoc((s) => s.past.length);
   const future = useDoc((s) => s.future.length);
   const setActiveSector = useDoc((s) => s.setActiveSector);
+  const seeds = useDoc((s) => s.doc.garden.seeds);
 
   const setPanel = useUI((s) => s.setPanel);
   const setTodayOpen = useUI((s) => s.setTodayOpen);
@@ -104,6 +105,29 @@ export function TopBar() {
 
         <button className="btn" onClick={() => setTodayOpen(true)} title="Everything due today, across every tab (T)">
           <Icon name="today" size={17} /> Today
+        </button>
+
+        {/* the garden you're growing, and the seeds waiting to go in */}
+        <button
+          className="btn"
+          onClick={() => setPanel('garden')}
+          title="The garden you've grown (G)"
+          style={{ position: 'relative' }}
+        >
+          <Icon name="sprout" size={17} /> Garden
+          {seeds > 0 && (
+            <span
+              style={{
+                position: 'absolute', top: -6, right: -6, minWidth: 18, height: 18,
+                padding: '0 4px', borderRadius: 999, border: '2.5px solid var(--line)',
+                background: '#EFCE7B', color: '#4A3B35', fontSize: 10.5, fontWeight: 700,
+                display: 'grid', placeItems: 'center',
+              }}
+              title={`${seeds} seed${seeds === 1 ? '' : 's'} to plant`}
+            >
+              {seeds}
+            </span>
+          )}
         </button>
 
         <div style={{ display: 'flex', gap: 3, padding: 3, borderRadius: 'var(--r)', border: '3px solid var(--line)', background: 'var(--surface)' }}>

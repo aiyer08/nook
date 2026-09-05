@@ -11,7 +11,8 @@ export type IconName =
   | 'eraser' | 'trash' | 'copy' | 'grip' | 'calendar' | 'note' | 'link' | 'image'
   | 'play' | 'clock' | 'chevronLeft' | 'chevronRight' | 'chevronDown' | 'chevronUp'
   | 'download' | 'upload' | 'sound' | 'mute' | 'sun' | 'target' | 'cake' | 'repeat'
-  | 'grid' | 'today' | 'list' | 'lock' | 'pencil' | 'dots' | 'flag' | 'bolt' | 'brain';
+  | 'grid' | 'today' | 'list' | 'lock' | 'pencil' | 'dots' | 'flag' | 'bolt' | 'brain'
+  | 'search' | 'sprout' | 'drop' | 'flame' | 'snow' | 'timer' | 'lamp';
 
 const P: Record<IconName, string> = {
   briefcase: 'M3 8.5h18v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-10Z M9 8.5V6a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2.5 M3 13h18',
@@ -68,6 +69,13 @@ const P: Record<IconName, string> = {
   dots: 'M6 12h.01 M12 12h.01 M18 12h.01',
   flag: 'M6 21V4 M6 5.2c4-2 8 2 12 0v8c-4 2-8-2-12 0',
   bolt: 'M13.5 3 5.5 13.5h5L10 21l8-10.5h-5L13.5 3Z',
+  search: 'M10.5 17a6.5 6.5 0 1 0 0-13 6.5 6.5 0 0 0 0 13Z M15.4 15.4 20 20',
+  sprout: 'M12 20.5V11 M12 11C12 8 9.6 6 6.5 6c0 3 2.4 5 5.5 5Z M12 11c0-3 2.4-5 5.5-5 0 3-2.4 5-5.5 5Z M8 20.5h8',
+  drop: 'M12 3.5s6 6.4 6 10.3A6 6 0 0 1 6 13.8C6 9.9 12 3.5 12 3.5Z',
+  flame: 'M12 21c3.3 0 6-2.4 6-5.5 0-4.4-6-12-6-12s-6 7.6-6 12C6 18.6 8.7 21 12 21Z M12 21c1.7 0 3-1.2 3-2.8 0-2.2-3-5.7-3-5.7s-3 3.5-3 5.7c0 1.6 1.3 2.8 3 2.8Z',
+  snow: 'M12 3v18 M4.2 7.5 19.8 16.5 M19.8 7.5 4.2 16.5 M12 7l2.5-2 M12 7 9.5 5 M12 17l2.5 2 M12 17l-2.5 2',
+  timer: 'M12 21a8 8 0 1 0 0-16 8 8 0 0 0 0 16Z M12 9v4l2.5 1.5 M9 3h6',
+  lamp: 'M7 10.5 12 3.5l5 7H7Z M12 10.5V20 M8.5 20h7',
   brain: 'M9.5 4.5A2.6 2.6 0 0 0 7 7a2.4 2.4 0 0 0-1.5 4.3A2.6 2.6 0 0 0 6.5 16a2.5 2.5 0 0 0 3 3.4V4.5Z M14.5 4.5A2.6 2.6 0 0 1 17 7a2.4 2.4 0 0 1 1.5 4.3 2.6 2.6 0 0 1-1 4.7 2.5 2.5 0 0 1-3 3.4V4.5Z M12 4.5v15',
 };
 
