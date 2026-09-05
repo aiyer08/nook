@@ -231,7 +231,9 @@ export type WidgetType =
   | 'spread'
   /* shapes distinct enough to deserve their own code */
   | 'papers' | 'followups' | 'journal' | 'countdown' | 'thermometer'
-  | 'wheel' | 'materials';
+  | 'wheel' | 'materials'
+  /* classes, each with a timetable, a syllabus and a note per lecture */
+  | 'classes';
 
 export type TapeStyle = 'none' | 'left' | 'right' | 'both' | 'corner';
 
@@ -295,6 +297,11 @@ export interface WidgetData {
   dayStart?: number;
   dayEnd?: number;
   months?: number;
+
+  /* ---- classes & lectures ---- */
+  /** which class is open in the notebook, and which lecture within it */
+  openClass?: ID;
+  openLecture?: ID;
 
   /* ---- the rest ---- */
   targetDate?: DateStr;
@@ -501,6 +508,74 @@ export interface Settings {
   burrow: boolean;
 }
 
+/* ------------------------------------------------------------------ */
+/* classes and lectures                                                */
+/* ------------------------------------------------------------------ */
+
+/**
+ * When a class meets.
+ *
+ * Weekdays plus a time, rather than a list of dates: that's how a timetable is
+ * actually given to you ("Mon/Wed/Fri 10am, weeks 1–10"), and it means the
+ * lecture dates can be *generated* rather than typed in one at a time.
+ */
+export interface Meets {
+  /** 0 = Sunday, to match Date.getDay() */
+  days: number[];
+  /** HH:mm */
+  time?: string;
+  endTime?: string;
+  where?: string;
+  /** the term: first and last day lectures can fall on */
+  from?: DateStr;
+  to?: DateStr;
+  /** every week, or every other week */
+  everyOtherWeek?: boolean;
+}
+
+export interface ClassRecord {
+  id: ID;
+  widgetId: ID;
+  sectorId: ID;
+  /** "Hash tables and graphs" */
+  name: string;
+  /** "CS 106B" — short, for the chip */
+  code?: string;
+  colour: string;
+  teacher?: string;
+  meets?: Meets;
+  /**
+   * The syllabus, however you have it: a link, a file in the browser's file
+   * store (lib/files.ts), or both.
+   */
+  syllabusUrl?: string;
+  syllabusFileId?: string;
+  syllabusFileName?: string;
+  syllabusSize?: number;
+  notes?: string;
+  order: number;
+  /** finished classes drop to the bottom rather than being deleted */
+  done?: boolean;
+}
+
+export interface LectureNote {
+  id: ID;
+  classId: ID;
+  date: DateStr;
+  time?: string;
+  /** "Week 3 — hash tables". Auto-numbered when generated from the timetable. */
+  title: string;
+  /** the notes themselves */
+  body: string;
+  /** the margin: things to look up, questions to ask */
+  questions?: string;
+  /** files dropped on this lecture — slides, a handout */
+  files?: { id: string; name: string; size: number }[];
+  updatedOn: DateStr;
+  /** ticked once you've been and written it up */
+  covered?: boolean;
+}
+
 export interface Stats {
   completed: number;
   streak: number;
@@ -567,6 +642,9 @@ export interface Doc {
   /** collection rows live at the top level so deadlines can cut across tabs */
   items: CollectionItem[];
   materials: Material[];
+  /** classes, and one note per lecture */
+  classes: ClassRecord[];
+  lectures: LectureNote[];
   settings: Settings;
   stats: Stats;
   garden: GardenState;

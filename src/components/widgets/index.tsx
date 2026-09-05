@@ -12,6 +12,7 @@ import { PapersWidget } from './PapersWidget';
 import { FollowUpsWidget } from './FollowUpsWidget';
 import { CountdownWidget, JournalWidget, MaterialsWidget, ThermometerWidget, WheelWidget } from './SmallWidgets';
 import { SpreadWidget } from './SpreadWidget';
+import { ClassesWidget } from './ClassesWidget';
 
 export function WidgetBody({ widget, sector }: { widget: Widget; sector: Sector }) {
   switch (widget.type) {
@@ -37,6 +38,7 @@ export function WidgetBody({ widget, sector }: { widget: Widget; sector: Sector 
     case 'wheel': return <WheelWidget widget={widget} sector={sector} />;
     case 'materials': return <MaterialsWidget widget={widget} sector={sector} />;
     case 'spread': return <SpreadWidget widget={widget} sector={sector} />;
+    case 'classes': return <ClassesWidget widget={widget} sector={sector} />;
     default: return null;
   }
 }

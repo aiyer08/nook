@@ -1,15 +1,16 @@
 import { create } from 'zustand';
 import type {
-  AvatarState, CalendarLink, CellValue, CollectionItem, Contact, Decoration, Doc, EventItem,
-  FieldDef, Goal, GoogleState, ID, Material, Sector, Settings, Stroke, Subtask, Task, Widget,
-  WidgetType,
+  AvatarState, CalendarLink, CellValue, ClassRecord, CollectionItem, Contact, DateStr, Decoration,
+  Doc, EventItem, FieldDef, Goal, GoogleState, ID, LectureNote, Material, Sector, Settings, Stroke,
+  Subtask, Task, Widget, WidgetType,
 } from './types';
 import { uid } from './id';
 import { PASTELS, THEMES } from './themes';
 import { addDays, seasonOf, today, toDateStr } from './dates';
 import { unlockedIds } from './cosmetics';
 import { nextPlot, seedsDue } from './growth';
-import { moveWidgetTo } from './move';
+import { dropWidgetContents, moveWidgetTo } from './move';
+import { lectureTitle, missingDates } from './classes';
 import type { Weather } from './weather';
 
 const STORAGE_KEY = 'nook.doc.v2';
@@ -75,6 +76,8 @@ export function emptyDoc(): Doc {
     decorations: [],
     items: [],
     materials: [],
+    classes: [],
+    lectures: [],
     settings: defaultSettings,
     stats: {
       completed: 0, streak: 0, lastActiveDate: null, unlocked: [], seen: [],
@@ -119,6 +122,7 @@ export const WIDGET_DEFAULTS: Record<
   thermometer:{ title: 'Goal',         w: 280, h: 320, label: 'Thermometer',   blurb: 'A jar that fills up. Savings, debt, anything.' },
   wheel:    { title: 'Level 10 life',  w: 360, h: 380, label: 'Life wheel',    blurb: 'Score each part of life one to ten.' },
   materials:{ title: 'Materials',      w: 340, h: 340, label: 'Materials locker', blurb: 'Resumes, statements and essays, kept once.' },
+  classes:  { title: 'Classes',         w: 460, h: 460, label: 'Classes & lectures', blurb: 'A class each, a note per lecture, and the syllabus kept with it.' },
 };
 
 function initialData(type: WidgetType): Widget['data'] {
@@ -131,6 +135,7 @@ function initialData(type: WidgetType): Widget['data'] {
     case 'calendar': return { monthCursor: today().slice(0, 7) };
     case 'quote': return { text: 'You are allowed to do this slowly.', author: '' };
     case 'collection': return { view: 'table', fields: [], sortDir: 'asc' };
+    case 'classes': return {};
     case 'tracker': return { mode: 'grid', days: {}, weeks: 26 };
     case 'spread': return { range: 'week', cursor: today(), dayStart: 7, dayEnd: 22 };
     case 'papers': return { papers: [] };
@@ -226,6 +231,8 @@ function loadDoc(): Doc | null {
       decorations: parsed.decorations ?? [],
       items: parsed.items ?? [],
       materials: parsed.materials ?? [],
+      classes: parsed.classes ?? [],
+      lectures: parsed.lectures ?? [],
       garden: { ...emptyDoc().garden, ...(parsed.garden ?? {}) },
       google: {
         ...defaultGoogle,
@@ -476,6 +483,19 @@ interface DocState {
   addField: (widgetId: ID, field: FieldDef) => void;
   removeField: (widgetId: ID, fieldId: ID) => void;
 
+  /* classes and lectures */
+  addClass: (c: { widgetId: ID; sectorId: ID; name: string; colour?: string }) => ID;
+  updateClass: (id: ID, patch: Partial<ClassRecord>) => void;
+  /** flip one weekday of a class's timetable */
+  toggleClassDay: (id: ID, day: number) => void;
+  removeClass: (id: ID) => void;
+  moveClass: (id: ID, delta: number) => void;
+  /** fill in the term from the timetable, without touching notes already written */
+  fillTerm: (classId: ID) => number;
+  addLecture: (classId: ID, date: DateStr, patch?: Partial<LectureNote>) => ID;
+  updateLecture: (id: ID, patch: Partial<LectureNote>) => void;
+  removeLecture: (id: ID) => void;
+
   /* materials locker */
   addMaterial: (m: Omit<Material, 'id'>) => ID;
   updateMaterial: (id: ID, patch: Partial<Material>) => void;
@@ -610,16 +630,18 @@ export const useDoc = create<DocState>((set, get) => ({
 
   removeSector: (id) =>
     get().commit('delete tab', (d) => {
-      // same as removing a widget: local only, Google keeps its events
       const dropped = new Set(d.widgets.filter((w) => w.sectorId === id).map((w) => w.id));
-      d.google.links = d.google.links.filter((l) => !dropped.has(l.widgetId));
       d.sectors = d.sectors.filter((s) => s.id !== id);
       d.widgets = d.widgets.filter((w) => w.sectorId !== id);
+      // everything those widgets held, in one place so nothing is missed
+      dropWidgetContents(d, dropped);
+      // and anything still pointing at the tab itself
       d.tasks = d.tasks.filter((t) => t.sectorId !== id);
       d.events = d.events.filter((e) => e.sectorId !== id);
       d.goals = d.goals.filter((g) => g.sectorId !== id);
       d.contacts = d.contacts.filter((c) => c.sectorId !== id);
       d.items = d.items.filter((i) => i.sectorId !== id);
+      d.classes = d.classes.filter((c) => c.sectorId !== id);
       d.decorations = d.decorations.filter((x) => x.sectorId !== id);
       d.strokes = d.strokes.filter((s) => s.sectorId !== id);
       if (d.activeSectorId === id) d.activeSectorId = d.sectors[0]?.id ?? null;
@@ -721,12 +743,7 @@ export const useDoc = create<DocState>((set, get) => ({
   removeWidget: (id) =>
     get().commit('delete widget', (d) => {
       d.widgets = d.widgets.filter((w) => w.id !== id);
-      d.tasks = d.tasks.filter((t) => t.widgetId !== id);
-      d.events = d.events.filter((e) => e.widgetId !== id);
-      d.goals = d.goals.filter((g) => g.widgetId !== id);
-      d.contacts = d.contacts.filter((c) => c.widgetId !== id);
-      d.items = d.items.filter((i) => i.widgetId !== id);
-      d.google.links = d.google.links.filter((l) => l.widgetId !== id);
+      dropWidgetContents(d, new Set([id]));
     }),
 
   duplicateWidget: (id) =>
@@ -1168,6 +1185,120 @@ export const useDoc = create<DocState>((set, get) => ({
       for (const i of d.items) {
         if (i.widgetId === widgetId) delete i.values[fieldId];
       }
+    }),
+
+  /* ---- classes and lectures ---- */
+
+  addClass: ({ widgetId, sectorId, name, colour }) => {
+    const id = uid();
+    get().commit('add a class', (d) => {
+      const mine = d.classes.filter((c) => c.widgetId === widgetId);
+      d.classes.push({
+        id, widgetId, sectorId, name,
+        // walk the pastels so two classes are never the same colour by accident
+        colour: colour ?? PASTELS[mine.length % PASTELS.length].value,
+        order: mine.reduce((m, c) => Math.max(m, c.order), -1) + 1,
+      });
+    });
+    return id;
+  },
+
+  updateClass: (id, patch) =>
+    get().commit('edit a class', (d) => {
+      const c = d.classes.find((x) => x.id === id);
+      if (c) Object.assign(c, patch);
+    }, { merge: true, key: `class:${id}` }),
+
+  /*
+    The day chips toggle through the store rather than by rebuilding `meets`
+    from props: two taps in quick succession would otherwise both compute from
+    the same stale value and the first one would be lost.
+  */
+  toggleClassDay: (id, day) =>
+    get().commit('change the timetable', (d) => {
+      const c = d.classes.find((x) => x.id === id);
+      if (!c) return;
+      const meets = c.meets ?? { days: [] };
+      const days = meets.days.includes(day)
+        ? meets.days.filter((x) => x !== day)
+        : [...meets.days, day].sort((a, b) => a - b);
+      c.meets = { ...meets, days };
+    }),
+
+  removeClass: (id) =>
+    get().commit('remove a class', (d) => {
+      d.classes = d.classes.filter((c) => c.id !== id);
+      // its lectures go with it; an orphaned note is unreachable
+      d.lectures = d.lectures.filter((l) => l.classId !== id);
+    }),
+
+  moveClass: (id, delta) =>
+    get().commit('reorder classes', (d) => {
+      const target = d.classes.find((c) => c.id === id);
+      if (!target) return;
+      const list = d.classes
+        .filter((c) => c.widgetId === target.widgetId)
+        .sort((a, b) => a.order - b.order);
+      const i = list.findIndex((c) => c.id === id);
+      const j = i + delta;
+      if (j < 0 || j >= list.length) return;
+      [list[i], list[j]] = [list[j], list[i]];
+      list.forEach((c, k) => { c.order = k; });
+    }),
+
+  fillTerm: (classId) => {
+    const { doc } = get();
+    const cls = doc.classes.find((c) => c.id === classId);
+    if (!cls) return 0;
+    const dates = missingDates(cls, doc.lectures);
+    if (!dates.length) return 0;
+
+    get().commit('fill in the term', (d) => {
+      const mine = d.lectures.filter((l) => l.classId === classId);
+      let n = mine.length;
+      for (const date of dates) {
+        d.lectures.push({
+          id: uid(),
+          classId,
+          date,
+          time: cls.meets?.time,
+          title: lectureTitle(n),
+          body: '',
+          updatedOn: today(),
+        });
+        n += 1;
+      }
+      // renumber by date, so inserting a missed week doesn't leave odd gaps
+      d.lectures
+        .filter((l) => l.classId === classId)
+        .sort((a, b) => a.date.localeCompare(b.date))
+        .forEach((l, i) => {
+          if (/^Lecture \d+$/.test(l.title)) l.title = lectureTitle(i);
+        });
+    });
+    return dates.length;
+  },
+
+  addLecture: (classId, date, patch) => {
+    const id = uid();
+    get().commit('add a lecture', (d) => {
+      const n = d.lectures.filter((l) => l.classId === classId).length;
+      d.lectures.push({
+        id, classId, date, title: lectureTitle(n), body: '', updatedOn: today(), ...patch,
+      });
+    });
+    return id;
+  },
+
+  updateLecture: (id, patch) =>
+    get().commit('write up a lecture', (d) => {
+      const l = d.lectures.find((x) => x.id === id);
+      if (l) Object.assign(l, patch, { updatedOn: today() });
+    }, { merge: true, key: `lecture:${id}` }),
+
+  removeLecture: (id) =>
+    get().commit('remove a lecture', (d) => {
+      d.lectures = d.lectures.filter((l) => l.id !== id);
     }),
 
   addMaterial: (m) => {

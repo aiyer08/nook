@@ -139,6 +139,12 @@ export function fileIdsIn(doc: Doc): string[] {
   for (const m of doc.materials ?? []) {
     if (m.fileId) ids.add(m.fileId);
   }
+  for (const c of doc.classes ?? []) {
+    if (c.syllabusFileId) ids.add(c.syllabusFileId);
+  }
+  for (const l of doc.lectures ?? []) {
+    for (const f of l.files ?? []) ids.add(f.id);
+  }
   return [...ids];
 }
 

@@ -25,6 +25,9 @@ export function SectorsPanel({ open, onClose }: { open: boolean; onClose: () => 
   const removeSector = useDoc((s) => s.removeSector);
   const moveSector = useDoc((s) => s.moveSector);
   const addSector = useDoc((s) => s.addSector);
+  const addWidget = useDoc((s) => s.addWidget);
+  const setActiveSector = useDoc((s) => s.setActiveSector);
+  const toast = useUI((s) => s.toast);
   const [draft, setDraft] = useState('');
   const [confirm, setConfirm] = useState<string | null>(null);
 
@@ -39,9 +42,27 @@ export function SectorsPanel({ open, onClose }: { open: boolean; onClose: () => 
     setDraft('');
   };
 
+  /**
+   * A tab that arrives ready for the term.
+   *
+   * "Somewhere to take notes" is a tab plus a notebook, and asking someone to
+   * make the tab, then find the widget, then set it up is three steps to get
+   * to the thing they wanted.
+   */
+  const addClassesTab = () => {
+    const existing = sectors.some((s) => /^(classes|lectures|notes)$/i.test(s.name));
+    const id = addSector('Classes', '#C0A9DB', 'book');
+    addWidget(id, 'classes');
+    setActiveSector(id);
+    onClose();
+    toast(existing
+      ? 'Another Classes tab, with a fresh notebook.'
+      : 'A tab for your classes. Add one, give it a timetable, fill the term in.');
+  };
+
   return (
     <Panel open={open} onClose={onClose} title="Your tabs" subtitle="Each part of life gets its own page and colour.">
-      <div style={{ display: 'flex', gap: 6, marginBottom: 16 }}>
+      <div style={{ display: 'flex', gap: 6, marginBottom: 8 }}>
         <input
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
@@ -52,6 +73,16 @@ export function SectorsPanel({ open, onClose }: { open: boolean; onClose: () => 
         />
         <button className="btn primary" onClick={add}><Icon name="plus" size={16} /> Add</button>
       </div>
+
+      <Row gap={6}>
+        <button className="btn tiny" onClick={addClassesTab}>
+          <Icon name="book" size={13} /> Start a Classes tab
+        </button>
+        <span style={{ fontSize: 11.5, color: 'var(--ink-faint)' }}>
+          comes with a notebook: classes, lectures, syllabus
+        </span>
+      </Row>
+      <div style={{ height: 16 }} />
 
       {sectors.map((s, i) => (
         <div
@@ -448,8 +479,8 @@ export function SettingsPanel({ open, onClose }: { open: boolean; onClose: () =>
         <Toggle
           on={settings.burrow}
           onChange={(v) => update({ burrow: v })}
-          label={`${doc.avatar.name}'s burrow`}
-          hint="They live in the corner of the page, come out, tidy, nap — and carry tasks between tabs. Once a day they hide behind a widget."
+          label={`${doc.avatar.name}'s den`}
+          hint="The burrow in the corner of the page: they come out, tidy, nap, carry tasks between tabs, and hide behind a widget once a day. Turn it off and the page is yours alone — this is also where it comes back."
         />
       </div>
 

@@ -14,8 +14,12 @@ import {
 } from '../src/lib/growth.ts';
 import { skyFromCode } from '../src/lib/weather.ts';
 import { compareGoalDue, compareRows, compareTaskDue, dueFieldOf, taskWhen } from '../src/lib/due.ts';
-import { moveWidgetTo, travellingWith } from '../src/lib/move.ts';
+import { dropWidgetContents, moveWidgetTo, travellingWith } from '../src/lib/move.ts';
 import { EMBED_LIMIT, fileIdsIn, kindOfMime, orphans, shouldEmbed } from '../src/lib/files.ts';
+import {
+  coverage, currentLecture, describeMeets, lectureTitle, lectureWhen, lecturesOf, meetingDates,
+  missingDates, nextMeeting,
+} from '../src/lib/classes.ts';
 import { compareBy, COLLECTION_PRESETS, presetById } from '../src/lib/collections.ts';
 import { completionDates, describeWeek, weekStart, wrapUp } from '../src/lib/wrapped.ts';
 
@@ -774,19 +778,23 @@ const twoTabs = () => ({
   goals: [{ id: 'g1', widgetId: 'w1', sectorId: 'school', title: 'g', target: 1, current: 0, unit: '', notes: '', done: false }],
   contacts: [{ id: 'c1', widgetId: 'w1', sectorId: 'school', name: 'A' }],
   items: [{ id: 'i1', widgetId: 'w1', sectorId: 'school', values: {}, order: 0, createdOn: T, checklist: [], materials: [], links: [], migrations: 0 }],
+  classes: [{ id: 'cl1', widgetId: 'w1', sectorId: 'school', name: 'CS 106B', colour: '#ccc', order: 0 }],
+  lectures: [{ id: 'l1', classId: 'cl1', date: T, title: 'Lecture 1', body: '', updatedOn: T }],
   google: { clientId: '', links: [{ calendarId: 'cal', summary: 'c', sectorId: 'school', widgetId: 'w1', timeMin: T, writeBack: true }], pendingDeletes: [], autoSync: false },
 });
 
 t('everything filed in the widget moves with it', () => {
   const d = twoTabs();
-  assert.equal(travellingWith(d, 'w1'), 5);
+  assert.equal(travellingWith(d, 'w1'), 6);   // task, event, goal, contact, row, class
   assert.equal(moveWidgetTo(d, 'w1', 'health', { x: 24, y: 400 }), true);
 
   assert.equal(d.widgets[0].sectorId, 'health');
   assert.deepEqual([d.widgets[0].x, d.widgets[0].y], [24, 400]);
-  for (const rec of [d.tasks[0], d.events[0], d.goals[0], d.contacts[0], d.items[0]]) {
+  for (const rec of [d.tasks[0], d.events[0], d.goals[0], d.contacts[0], d.items[0], d.classes[0]]) {
     assert.equal(rec.sectorId, 'health', 'a record was left behind on the old tab');
   }
+  // a lecture hangs off its class, so it needs no sector and can't be orphaned
+  assert.equal(d.lectures[0].classId, 'cl1');
   // a synced calendar keeps pointing at the widget it belongs to
   assert.equal(d.google.links[0].sectorId, 'health');
   // ...and nothing else was touched
@@ -808,6 +816,30 @@ t('a move that would change nothing is refused', () => {
   // refused means untouched, so no undo step gets pushed for nothing
   assert.equal(d.widgets[0].sectorId, 'school');
   assert.equal(d.tasks[0].sectorId, 'school');
+});
+
+t('deleting a widget takes everything filed in it, classes included', () => {
+  const d = twoTabs();
+  dropWidgetContents(d, new Set(['w1']));
+  assert.deepEqual(d.tasks.map((t) => t.id), ['t2'], 'another widget’s task survives');
+  assert.deepEqual(d.events, []);
+  assert.deepEqual(d.goals, []);
+  assert.deepEqual(d.contacts, []);
+  assert.deepEqual(d.items, []);
+  assert.deepEqual(d.classes, [], 'the class went with its notebook');
+  assert.deepEqual(d.lectures, [], 'and its lectures went with the class');
+  assert.deepEqual(d.google.links, [], 'and we stopped syncing that calendar');
+  // the widget records themselves are the caller's business
+  assert.equal(d.widgets.length, 2);
+});
+
+t('a lecture belonging to a class that stays is left alone', () => {
+  const d = twoTabs();
+  d.classes.push({ id: 'cl2', widgetId: 'w2', sectorId: 'health', name: 'Other', colour: '#c', order: 0 });
+  d.lectures.push({ id: 'l2', classId: 'cl2', date: T, title: 'Lecture 1', body: '', updatedOn: T });
+  dropWidgetContents(d, new Set(['w1']));
+  assert.deepEqual(d.classes.map((c) => c.id), ['cl2']);
+  assert.deepEqual(d.lectures.map((l) => l.id), ['l2']);
 });
 
 t('a hand-picked widget colour survives the move', () => {
@@ -868,6 +900,127 @@ t('a backup only inlines files it can sensibly carry', () => {
   assert.equal(shouldEmbed(1024), true);
   assert.equal(shouldEmbed(EMBED_LIMIT), true);
   assert.equal(shouldEmbed(EMBED_LIMIT + 1), false);
+});
+
+console.log('\nclasses and lectures');
+
+// 2026-09-07 is a Monday
+const term = { days: [1, 3], time: '10:00', from: '2026-09-07', to: '2026-09-20' };
+
+t('a weekly timetable becomes the term, date by date', () => {
+  assert.deepEqual(meetingDates(term), [
+    '2026-09-07', '2026-09-09',   // Mon, Wed
+    '2026-09-14', '2026-09-16',
+  ]);
+});
+
+t('no days or no start date means no dates, rather than a guess', () => {
+  assert.deepEqual(meetingDates(undefined), []);
+  assert.deepEqual(meetingDates({ days: [], from: '2026-09-07' }), []);
+  assert.deepEqual(meetingDates({ days: [1] }), []);
+});
+
+t('every other week skips the weeks in between', () => {
+  const fortnightly = { ...term, to: '2026-10-05', everyOtherWeek: true };
+  assert.deepEqual(meetingDates(fortnightly), [
+    '2026-09-07', '2026-09-09',   // week 1
+    '2026-09-21', '2026-09-23',   // week 3
+    '2026-10-05',                 // week 5
+  ]);
+});
+
+t('a mistyped end date can not generate forever', () => {
+  const silly = { days: [1, 2, 3, 4, 5], from: '2026-01-01', to: '2099-01-01' };
+  assert.equal(meetingDates(silly).length, 400);
+  assert.equal(meetingDates(silly, 10).length, 10);
+});
+
+t('an end date before the start falls back to a term-length window', () => {
+  const backwards = { days: [1], from: '2026-09-07', to: '2026-01-01' };
+  const dates = meetingDates(backwards);
+  assert.ok(dates.length > 0 && dates.length <= 14);
+  assert.equal(dates[0], '2026-09-07');
+});
+
+t('filling the term twice only adds what is missing', () => {
+  const cls = { id: 'c1', widgetId: 'w', sectorId: 's', name: 'CS', colour: '#c', order: 0, meets: term };
+  const already = [
+    { id: 'l1', classId: 'c1', date: '2026-09-07', title: 'Lecture 1', body: 'notes I wrote', updatedOn: T },
+    { id: 'l2', classId: 'c1', date: '2026-09-09', title: 'Lecture 2', body: '', updatedOn: T },
+    { id: 'other', classId: 'c2', date: '2026-09-14', title: 'not mine', body: '', updatedOn: T },
+  ];
+  assert.deepEqual(missingDates(cls, already), ['2026-09-14', '2026-09-16']);
+  // and once they exist, there is nothing left to add
+  const full = [...already, ...missingDates(cls, already).map((date, i) => ({
+    id: `n${i}`, classId: 'c1', date, title: lectureTitle(i + 2), body: '', updatedOn: T,
+  }))];
+  assert.deepEqual(missingDates(cls, full), []);
+});
+
+t('the timetable reads like a timetable', () => {
+  assert.equal(describeMeets(term), 'Mon, Wed · 10:00');
+  assert.equal(describeMeets({ ...term, endTime: '11:20', where: 'Hewlett 200' }),
+    'Mon, Wed · 10:00–11:20 · Hewlett 200');
+  assert.equal(describeMeets({ days: [0, 6] }), 'Sat, Sun');   // Monday-first order
+  assert.equal(describeMeets(undefined), 'No times set yet');
+});
+
+t('a lecture date reads once, not twice', () => {
+  const l = (date, time) => ({ id: 'x', classId: 'c', date, time, title: 'L', body: '', updatedOn: T });
+  assert.equal(lectureWhen(l('2026-09-09'), '2026-09-09'), 'Today');
+  assert.equal(lectureWhen(l('2026-09-10'), '2026-09-09'), 'Tomorrow');
+  assert.equal(lectureWhen(l('2026-09-08'), '2026-09-09'), 'Yesterday');
+  // prettyDate already leads with the weekday — "Mon Mon Sep 7" was the bug
+  assert.equal(lectureWhen(l('2026-09-07'), '2026-09-09'), 'Mon Sep 7');
+  assert.equal(lectureWhen(l('2026-09-07', '10:00'), '2026-09-09'), 'Mon Sep 7 · 10:00');
+});
+
+t('the next meeting is today if it is today', () => {
+  assert.equal(nextMeeting(term, '2026-09-07'), '2026-09-07');
+  assert.equal(nextMeeting(term, '2026-09-08'), '2026-09-09');
+  assert.equal(nextMeeting(term, '2026-12-01'), null);
+});
+
+t('lectures sort by date then time, whatever order they were made in', () => {
+  const list = [
+    { id: 'b', classId: 'c1', date: '2026-09-09', time: '14:00', title: 'B', body: '', updatedOn: T },
+    { id: 'a', classId: 'c1', date: '2026-09-09', time: '09:00', title: 'A', body: '', updatedOn: T },
+    { id: 'early', classId: 'c1', date: '2026-09-07', title: 'Early', body: '', updatedOn: T },
+    { id: 'nope', classId: 'other', date: '2026-09-01', title: 'Other class', body: '', updatedOn: T },
+  ];
+  assert.deepEqual(lecturesOf(list, 'c1').map((l) => l.id), ['early', 'a', 'b']);
+});
+
+t('the notebook opens on today, then on what is next', () => {
+  const list = lecturesOf([
+    { id: 'past', classId: 'c', date: '2026-09-07', title: '1', body: '', updatedOn: T },
+    { id: 'now', classId: 'c', date: '2026-09-09', title: '2', body: '', updatedOn: T },
+    { id: 'soon', classId: 'c', date: '2026-09-14', title: '3', body: '', updatedOn: T },
+  ], 'c');
+  assert.equal(currentLecture(list, '2026-09-09').id, 'now');
+  assert.equal(currentLecture(list, '2026-09-10').id, 'soon');
+  assert.equal(currentLecture(list, '2026-12-01').id, 'soon', 'past the end, the last one');
+  assert.equal(currentLecture([], '2026-09-09'), null);
+});
+
+t('written up counts notes, not just the tick', () => {
+  const list = [
+    { id: 'a', classId: 'c', date: T, title: '1', body: 'I typed something', updatedOn: T },
+    { id: 'b', classId: 'c', date: T, title: '2', body: '', covered: true, updatedOn: T },
+    { id: 'c', classId: 'c', date: T, title: '3', body: '   ', updatedOn: T },
+  ];
+  assert.deepEqual(coverage(list), { done: 2, total: 3 });
+});
+
+t('a syllabus and a lecture handout are files the sweep must not eat', () => {
+  const d = {
+    widgets: [],
+    materials: [],
+    classes: [{ id: 'c1', syllabusFileId: 'syl' }],
+    lectures: [{ id: 'l1', classId: 'c1', files: [{ id: 'slides', name: 's.pdf', size: 1 }] }],
+  };
+  assert.deepEqual(fileIdsIn(d).sort(), ['slides', 'syl']);
+  assert.deepEqual(orphans(['syl', 'slides', 'junk'], fileIdsIn(d)), ['junk']);
 });
 
 console.log(`\n${pass} checks passed\n`);

@@ -62,6 +62,7 @@ export function Burrow() {
   const foundOn = useDoc((s) => s.doc.garden.foundOn);
   const carryTask = useDoc((s) => s.carryTask);
   const hideMouse = useDoc((s) => s.hideMouse);
+  const updateSettings = useDoc((s) => s.updateSettings);
 
   const carrying = useUI((s) => s.carrying);
   const setCarrying = useUI((s) => s.setCarrying);
@@ -150,7 +151,7 @@ export function Burrow() {
           ? `${avatar.name} is tidying up.`
           : phase === 'in'
             ? `${avatar.name} is inside, pottering about.`
-            : `${avatar.name} is out. Drag a task here to have it carried.`;
+            : `${avatar.name} is out. Drag a task here to have it carried — or tap the ✕ to put the den away.`;
 
   return (
     <div
@@ -163,6 +164,37 @@ export function Burrow() {
         width: 118, height: 96, pointerEvents: 'none',
       }}
     >
+      {/*
+        A way to put the den away without going hunting in Settings. It only
+        appears once you're already looking at it, so it isn't a permanent
+        dismiss button sitting on the page.
+      */}
+      <AnimatePresence>
+        {(hovered || said) && !carried && (
+          <motion.button
+            initial={{ opacity: 0, scale: 0.7 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.7 }}
+            onClick={(e) => {
+              e.stopPropagation();
+              updateSettings({ burrow: false });
+              toast(`${avatar.name}'s den is put away. Settings brings it back.`);
+            }}
+            title="Hide the den"
+            aria-label="Hide the den"
+            style={{
+              position: 'absolute', right: -2, bottom: 58, zIndex: 4,
+              width: 26, height: 26, borderRadius: 999, padding: 0,
+              border: '2.5px solid var(--line)', background: 'var(--surface)',
+              boxShadow: 'var(--shadow-sm)', display: 'grid', placeItems: 'center',
+              pointerEvents: 'auto', cursor: 'pointer',
+            }}
+          >
+            <Icon name="close" size={13} color="var(--ink-soft)" />
+          </motion.button>
+        )}
+      </AnimatePresence>
+
       {/* what they're up to, on hover or after a poke */}
       <AnimatePresence>
         {(hovered || said || droppable) && (

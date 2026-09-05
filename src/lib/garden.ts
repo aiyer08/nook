@@ -191,7 +191,7 @@ export const GARDEN: Flower[] = [
     spread: 60,
     palette: { petal: '#B0B9E6', deep: '#8D98D3', centre: '#F2E4B8', stem: '#7E9A6B', leaf: '#8FB07C' },
     contents: [
-      'w:papers', 'c:assignments', 'c:classes', 'c:grades', 'c:syllabus',
+      'w:classes', 'w:papers', 'c:assignments', 'c:classes', 'c:grades', 'c:syllabus',
       'c:reading', 'c:flashcards', 'c:labnotes', 'c:interviewqa', 'c:skills',
       't:study', 'c:conferences',
     ],

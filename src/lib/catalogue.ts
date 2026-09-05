@@ -81,6 +81,7 @@ export const CATALOGUE: Entry[] = [
   plain('dates', 'Basics', 'cake', 'birthdays anniversaries yearly important'),
 
   /* work and study */
+  plain('classes', 'Work & study', 'book', 'lecture notes notebook class course timetable syllabus semester term university school', ['School', 'Study']),
   plain('papers', 'Work & study', 'book', 'doi arxiv research reading list crossref citation', ['School', 'Career', 'Work']),
   plain('followups', 'Work & study', 'clock', 'email nudge waiting reply chase', ['Work', 'Career']),
   plain('materials', 'Work & study', 'copy', 'resume cv personal statement essay locker attachments', ['Career', 'School']),

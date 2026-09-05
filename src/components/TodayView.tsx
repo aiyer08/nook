@@ -13,6 +13,7 @@ import { TaskRow } from './TaskRow';
 import { Avatar } from './Avatar';
 import { eventOnDay } from './widgets/CalendarWidget';
 import { readableOn } from '../lib/themes';
+import { todaysLectures } from './widgets/ClassesWidget';
 
 export function TodayView({ open, onClose }: { open: boolean; onClose: () => void }) {
   const doc = useDoc((s) => s.doc);
@@ -72,6 +73,11 @@ export function TodayView({ open, onClose }: { open: boolean; onClose: () => voi
     soon.sort((a, b) => a.date.localeCompare(b.date));
     return { timed, floating, habits, earlier, done, soon };
   }, [doc.tasks, doc.events, today]);
+
+  const lectures = useMemo(
+    () => todaysLectures(doc.classes, doc.lectures, today),
+    [doc.classes, doc.lectures, today],
+  );
 
   const pass = (e?: EffortTag) => filter === 'all' || e === filter;
   const openCount =
@@ -234,6 +240,43 @@ export function TodayView({ open, onClose }: { open: boolean; onClose: () => voi
                 <Empty icon="moon">
                   Nothing here yet! Your {doc.avatar.species} is taking a nap. 🌙
                 </Empty>
+              )}
+
+              {/*
+                Lectures. They're dated and timed, so they belong on today's
+                page — but they're read-only here: writing them up happens in
+                the notebook, one tap away.
+              */}
+              {lectures.length > 0 && (
+                <Block title="Lectures today" icon="book">
+                  {lectures.map(({ lecture, cls }) => (
+                    <button
+                      key={lecture.id}
+                      onClick={() => { setActiveSector(cls.sectorId); onClose(); }}
+                      style={{
+                        display: 'flex', width: '100%', gap: 9, alignItems: 'center', textAlign: 'left',
+                        padding: '8px 10px', marginBottom: 6, borderRadius: 'var(--r)',
+                        border: `2.5px solid ${cls.colour}`,
+                        background: `color-mix(in srgb, ${cls.colour} 16%, var(--surface))`,
+                      }}
+                    >
+                      <span style={{ fontSize: 12.5, fontWeight: 700, minWidth: 46 }}>
+                        {lecture.time ?? '—'}
+                      </span>
+                      <span style={{ flex: 1, minWidth: 0 }}>
+                        <span style={{ display: 'block', fontSize: 13.5, fontWeight: 700 }}>
+                          {cls.code || cls.name}
+                          <span style={{ color: 'var(--ink-soft)', fontWeight: 600 }}> · {lecture.title}</span>
+                        </span>
+                        <span style={{ display: 'block', fontSize: 11.5, color: 'var(--ink-soft)' }}>
+                          {[cls.meets?.where, lecture.body.trim() ? 'written up' : 'not written up yet']
+                            .filter(Boolean).join(' · ')}
+                        </span>
+                      </span>
+                      <Icon name="chevronRight" size={14} color="var(--ink-faint)" />
+                    </button>
+                  ))}
+                </Block>
               )}
 
               {/* on the clock */}

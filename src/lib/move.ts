@@ -50,6 +50,9 @@ export function moveWidgetTo(d: Doc, widgetId: ID, toSectorId: ID, spot: Spot): 
   for (const g of d.goals) if (g.widgetId === widgetId) g.sectorId = toSectorId;
   for (const c of d.contacts) if (c.widgetId === widgetId) c.sectorId = toSectorId;
   for (const i of d.items) if (i.widgetId === widgetId) i.sectorId = toSectorId;
+  // classes belong to a notebook widget; their lectures hang off the class,
+  // so they need no sector of their own and come along for free
+  for (const c of d.classes ?? []) if (c.widgetId === widgetId) c.sectorId = toSectorId;
   // a synced calendar keeps syncing, into the same widget on its new tab
   for (const l of d.google.links) if (l.widgetId === widgetId) l.sectorId = toSectorId;
 
@@ -67,5 +70,33 @@ export function travellingWith(d: Doc, widgetId: ID): number {
     + d.events.filter(mine).length
     + d.goals.filter(mine).length
     + d.contacts.filter(mine).length
-    + d.items.filter(mine).length;
+    + d.items.filter(mine).length
+    + (d.classes ?? []).filter(mine).length;
+}
+
+/**
+ * Everything filed inside a set of widgets, removed.
+ *
+ * Deleting a widget and deleting a tab had their own copies of this list, and
+ * a new record type — classes — was added to one and missed by both. One list,
+ * used by both, is the only version of this that stays correct.
+ *
+ * Lectures are keyed to a class rather than a widget, so they go when their
+ * class does; an orphaned lecture would be unreachable *and* would keep its
+ * handouts alive in the file store.
+ */
+export function dropWidgetContents(d: Doc, widgetIds: Set<ID>): void {
+  const mine = (x: { widgetId: ID }) => widgetIds.has(x.widgetId);
+
+  d.tasks = d.tasks.filter((t) => !mine(t));
+  d.events = d.events.filter((e) => !mine(e));
+  d.goals = d.goals.filter((g) => !mine(g));
+  d.contacts = d.contacts.filter((c) => !mine(c));
+  d.items = d.items.filter((i) => !mine(i));
+  // local only: Google keeps its own events, we just stop syncing them here
+  d.google.links = d.google.links.filter((l) => !widgetIds.has(l.widgetId));
+
+  const goneClasses = new Set((d.classes ?? []).filter(mine).map((c) => c.id));
+  d.classes = (d.classes ?? []).filter((c) => !mine(c));
+  d.lectures = (d.lectures ?? []).filter((l) => !goneClasses.has(l.classId));
 }
