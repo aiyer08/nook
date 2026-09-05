@@ -450,4 +450,17 @@ t('every flower holds something', () => {
   assert.equal(GARDEN.length, 11);
 });
 
+t('the eleven are actually eleven different flowers', () => {
+  // The point of a garden is that you recognise a folder by its silhouette.
+  // If most of them share a growth habit they read as one flower in a row of
+  // colours, so hold the line on variety.
+  const forms = new Set(GARDEN.map((f) => f.form));
+  assert.ok(forms.size >= 7, `only ${forms.size} growth habits between eleven flowers`);
+  for (const want of ['circle', 'ladder', 'cup', 'pompom']) {
+    assert.ok(forms.has(want), `no flower uses the ${want} form`);
+  }
+  const species = new Set(GARDEN.map((f) => f.species.toLowerCase()));
+  assert.equal(species.size, 11, 'two flowers share a species');
+});
+
 console.log(`\n${pass} checks passed\n`);

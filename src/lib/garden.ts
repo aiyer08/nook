@@ -12,10 +12,16 @@ import { CATALOGUE, type Entry } from './catalogue';
 export type Form =
   /** petals radiating from a centre */
   | 'single'
+  /** the plain one: a disc with 5-6 round petals set around it */
+  | 'circle'
+  /** a closed cup of a few tall petals, tulip-fashion */
+  | 'cup'
+  /** rungs of paired leaflets up the stem, small star blooms on top */
+  | 'ladder'
+  /** a dense ball of tiny petals in concentric rings */
+  | 'pompom'
   /** several small blooms that scatter apart */
   | 'cluster'
-  /** buds up a stalk, opening bottom to top */
-  | 'spire'
   /** a rounded mound of florets */
   | 'dome'
   /** coiled layers seen from above */
@@ -56,7 +62,7 @@ export const GARDEN: Flower[] = [
     name: 'Time & Planning',
     species: 'Tulip',
     blurb: 'Spreads, dates and the things with a when.',
-    form: 'single',
+    form: 'cup',
     petals: 3,
     layers: 1,
     shape: 'pointed',
@@ -71,11 +77,11 @@ export const GARDEN: Flower[] = [
     id: 'daisy',
     name: 'Tasks & Doing',
     species: 'Daisy',
-    blurb: 'The default flower, because tasks are the default thing.',
-    form: 'single',
-    petals: 12,
+    blurb: 'A circle with six round petals — the plainest flower there is.',
+    form: 'circle',
+    petals: 6,
     layers: 1,
-    shape: 'oval',
+    shape: 'round',
     spread: 90,
     palette: { petal: '#FFF6E4', deep: '#F0E2C6', centre: '#EFCE7B', stem: '#8FA97C', leaf: '#A8C09A' },
     contents: ['w:todo', 'c:inbox', 'c:someday', 'w:habits', 'j:braindump', 'w:notes', 'c:blank'],
@@ -132,8 +138,8 @@ export const GARDEN: Flower[] = [
     id: 'marigold',
     name: 'Money',
     species: 'Marigold',
-    blurb: 'Densely layered and coin-round.',
-    form: 'single',
+    blurb: 'A dense pompom of tiny petals, coin-round.',
+    form: 'pompom',
     petals: 14,
     layers: 3,
     shape: 'ruffled',
@@ -174,16 +180,16 @@ export const GARDEN: Flower[] = [
     ],
   },
   {
-    id: 'lavender',
+    id: 'jacobsladder',
     name: 'Study & Knowledge',
-    species: 'Lavender',
-    blurb: 'A vertical sprig, narrow and bookmark-shaped. Buds pop bottom to top.',
-    form: 'spire',
-    petals: 7,
+    species: "Jacob's ladder",
+    blurb: 'Leaflets climb the stem like rungs, and the blooms sit at the top.',
+    form: 'ladder',
+    petals: 5,
     layers: 1,
     shape: 'oval',
     spread: 60,
-    palette: { petal: '#C3A9DE', deep: '#A98CC9', centre: '#E4D6F0', stem: '#7E9A6B', leaf: '#93B37E' },
+    palette: { petal: '#B0B9E6', deep: '#8D98D3', centre: '#F2E4B8', stem: '#7E9A6B', leaf: '#8FB07C' },
     contents: [
       'w:papers', 'c:assignments', 'c:classes', 'c:grades', 'c:syllabus',
       'c:reading', 'c:flashcards', 'c:labnotes', 'c:interviewqa', 'c:skills',

@@ -411,25 +411,6 @@ export function SettingsPanel({ open, onClose }: { open: boolean; onClose: () =>
         />
       </div>
 
-      <Field label="Pen" hint="One setting, changing how every stroke you've drawn looks.">
-        <Row>
-          {([
-            ['fineliner', 'Fineliner', 'An even line.'],
-            ['brush', 'Brush pen', 'Tapers at both ends.'],
-            ['highlighter', 'Highlighter', 'Wide and translucent.'],
-          ] as const).map(([id, label, why]) => (
-            <button
-              key={id}
-              className={`btn tiny ${settings.penTexture === id ? 'primary' : ''}`}
-              onClick={() => update({ penTexture: id })}
-              title={why}
-            >
-              {label}
-            </button>
-          ))}
-        </Row>
-      </Field>
-
       <Field label="This page">
         <Row>
           <button

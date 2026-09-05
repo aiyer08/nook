@@ -10,7 +10,7 @@
  * droop and desaturate; matches stand up and sway. Same amount of code, much
  * more charming.
  */
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { CATALOGUE, type Entry } from '../lib/catalogue';
 import type { Flower } from '../lib/garden';
@@ -57,6 +57,41 @@ export function GardenPicker({ open, onClose }: { open: boolean; onClose: () => 
     for (const [id, n] of counts) if (n > bestN) { best = id; bestN = n; }
     return bestN >= 2 ? best : null;
   }, [widgets]);
+
+  /*
+    The bee's route is written in percentages, so to make it land on the
+    favourite flower we have to measure where that flower actually is — the
+    grid reflows with the panel width, and opening a flower moves everything
+    below it. Measuring after layout is the only honest way to know.
+  */
+  const gridRef = useRef<HTMLDivElement | null>(null);
+  const favRef = useRef<HTMLDivElement | null>(null);
+  const [beeStop, setBeeStop] = useState<{ x: number; y: number } | null>(null);
+
+  useLayoutEffect(() => {
+    if (!open) return;
+    const measure = () => {
+      const grid = gridRef.current;
+      const cell = favRef.current;
+      if (!grid || !cell) { setBeeStop(null); return; }
+      const g = grid.getBoundingClientRect();
+      const c = cell.getBoundingClientRect();
+      if (!g.width || !g.height) return;
+      const next = {
+        // just off the bloom's shoulder, not dead centre on it
+        x: ((c.left + c.width * 0.66) - g.left) / g.width * 100,
+        y: ((c.top + c.height * 0.22) - g.top) / g.height * 100,
+      };
+      setBeeStop((prev) =>
+        prev && Math.abs(prev.x - next.x) < 1 && Math.abs(prev.y - next.y) < 1 ? prev : next);
+    };
+    measure();
+    const grid = gridRef.current;
+    if (!grid || typeof ResizeObserver === 'undefined') return;
+    const ro = new ResizeObserver(measure);
+    ro.observe(grid);
+    return () => ro.disconnect();
+  }, [open, favourite, bloomed, q]);
 
   /** A category with nothing planted stays a tight bud: potential, not emptiness. */
   const planted = useMemo(() => {
@@ -191,7 +226,14 @@ export function GardenPicker({ open, onClose }: { open: boolean; onClose: () => 
         </div>
       )}
 
+      <div style={{ position: 'relative' }}>
+        {/* One bee for the whole garden. It wanders the grid and sits down on
+            whichever flower you plant from most, rather than being stuck to it. */}
+        {motionOn && (
+          <Bee size={24} landAt={beeStop} />
+        )}
       <div
+        ref={gridRef}
         style={{
           display: 'grid',
           gridTemplateColumns: 'repeat(auto-fill, minmax(132px, 1fr))',
@@ -205,7 +247,11 @@ export function GardenPicker({ open, onClose }: { open: boolean; onClose: () => 
           const wilted = Boolean(q.trim()) && !matching.has(f.id);
           const bud = !planted.has(f.id);
           return (
-            <div key={f.id} style={{ position: 'relative', gridColumn: isOpen ? '1 / -1' : undefined }}>
+            <div
+              key={f.id}
+              ref={favourite === f.id ? favRef : undefined}
+              style={{ position: 'relative', gridColumn: isOpen ? '1 / -1' : undefined }}
+            >
               <motion.button
                 onClick={() => toggle(f)}
                 aria-expanded={isOpen}
@@ -230,11 +276,6 @@ export function GardenPicker({ open, onClose }: { open: boolean; onClose: () => 
                     size={isOpen ? 132 : 104}
                     animate={motionOn}
                   />
-                  {favourite === f.id && !wilted && (
-                    <span style={{ position: 'absolute', top: 4, right: -4 }}>
-                      <Bee size={24} />
-                    </span>
-                  )}
                   {falling?.id === f.id && <FallingPetal color={falling.color} />}
                 </span>
 
@@ -292,6 +333,7 @@ export function GardenPicker({ open, onClose }: { open: boolean; onClose: () => 
             </div>
           );
         })}
+        </div>
       </div>
 
       {/*

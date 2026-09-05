@@ -11,7 +11,7 @@
  * open like a door. Get that origin wrong and petals appear to slide away
  * sideways, which is the whole difference between blooming and glitching.
  */
-import { memo } from 'react';
+import { memo, useMemo } from 'react';
 import { motion } from 'framer-motion';
 import type { Flower } from '../lib/garden';
 import { mix } from '../lib/themes';
@@ -149,10 +149,16 @@ export const FlowerSvg = memo(function FlowerSvg({
       </motion.g>
 
       {/* the bloom */}
-      {flower.form === 'cluster' ? (
+      {flower.form === 'circle' ? (
+        <CirclePetals flower={flower} open={open} petal={petal} deep={deep} centre={centre} ink={ink} spring={spring} />
+      ) : flower.form === 'cup' ? (
+        <Cup flower={flower} open={open} petal={petal} deep={deep} centre={centre} ink={ink} spring={spring} />
+      ) : flower.form === 'ladder' ? (
+        <Ladder flower={flower} open={open} petal={petal} deep={deep} centre={centre} ink={ink} spring={spring} />
+      ) : flower.form === 'pompom' ? (
+        <Pompom flower={flower} open={open} petal={petal} deep={deep} centre={centre} ink={ink} spring={spring} />
+      ) : flower.form === 'cluster' ? (
         <Cluster flower={flower} open={open} petal={petal} deep={deep} centre={centre} ink={ink} spring={spring} />
-      ) : flower.form === 'spire' ? (
-        <Spire flower={flower} open={open} petal={petal} deep={deep} ink={ink} spring={spring} />
       ) : flower.form === 'dome' ? (
         <Dome flower={flower} open={open} petal={petal} deep={deep} centre={centre} ink={ink} spring={spring} />
       ) : flower.form === 'spiral' ? (
@@ -361,43 +367,6 @@ function Cluster({ flower, open, petal, deep, centre, ink, spring }: SubProps) {
   );
 }
 
-/* ---------------- buds up a stalk, opening bottom to top ---------------- */
-
-function Spire({ flower, open, petal, deep, ink, spring }: SubProps) {
-  const n = flower.petals;
-  return (
-    <g>
-      {Array.from({ length: n }, (_, i) => {
-        // bottom of the stalk first, which is how lavender actually opens
-        const fromBottom = n - 1 - i;
-        const y = CY + 14 - i * 7.5;
-        const side = i % 2 === 0 ? -1 : 1;
-        return (
-          <motion.g
-            key={i}
-            initial={false}
-            animate={open
-              ? { x: side * 5.5, scale: 1, rotate: side * 16 }
-              : { x: 0, scale: 0.7, rotate: 0 }}
-            transition={{ ...spring, delay: open ? fromBottom * 0.05 : i * 0.02 }}
-            style={{ transformOrigin: `${C}px ${y}px`, transformBox: 'view-box' }}
-          >
-            <ellipse
-              cx={C}
-              cy={y}
-              rx={5.4}
-              ry={7}
-              fill={i % 2 ? deep : petal}
-              stroke={ink}
-              strokeWidth={2.3}
-            />
-          </motion.g>
-        );
-      })}
-    </g>
-  );
-}
-
 /* ---------------- a mound of small florets ---------------- */
 
 function Dome({ flower, open, petal, deep, centre, ink, spring }: SubProps) {
@@ -509,32 +478,305 @@ export function FallingPetal({ color, ink = '#4A3B35' }: { color: string; ink?: 
   );
 }
 
-/** A bee that lands on whichever flower gets used most. */
-export function Bee({ size = 26 }: { size?: number }) {
+/* ---------------- the plain one: a circle with round petals ---------------- */
+
+/**
+ * The most readable flower shape there is — a disc with six circles round it.
+ * Deliberately the simplest in the garden, for the category people click most.
+ */
+function CirclePetals({ flower, open, petal, deep, centre, ink, spring }: SubProps) {
+  const n = flower.petals;
+  const r = 11;      // petal radius
+  const ring = 17;   // how far out they sit
   return (
-    <motion.svg
-      width={size}
-      height={size * 0.8}
-      viewBox="0 0 40 32"
-      aria-label="a bee, resting on your most-used flower"
-      role="img"
-      animate={{ y: [0, -2.5, 0], rotate: [-3, 3, -3] }}
-      transition={{ duration: 2.6, repeat: Infinity, ease: 'easeInOut' }}
-      style={{ display: 'block', overflow: 'visible' }}
+    <g>
+      <Sepals flower={flower} open={open} ink={ink} />
+      {Array.from({ length: n }, (_, i) => {
+        const a = (i / n) * Math.PI * 2 - Math.PI / 2;
+        return (
+          <motion.circle
+            key={i}
+            cx={C}
+            cy={CY}
+            r={r}
+            fill={i % 2 && flower.layers > 1 ? deep : petal}
+            stroke={ink}
+            strokeWidth={2.8}
+            initial={false}
+            animate={open
+              ? { x: Math.cos(a) * ring, y: Math.sin(a) * ring, scale: 1, opacity: 1 }
+              // closed: all six stacked at the middle, one clean silhouette
+              : { x: 0, y: -6, scale: 0.92, opacity: i === 0 ? 1 : 0 }}
+            transition={{ ...spring, delay: open ? i * 0.045 : 0 }}
+          />
+        );
+      })}
+      <motion.circle
+        cx={C}
+        cy={CY}
+        r={9}
+        fill={centre}
+        stroke={ink}
+        strokeWidth={2.8}
+        initial={false}
+        animate={open ? { scale: 1, opacity: 1 } : { scale: 0.2, opacity: 0 }}
+        transition={{ ...spring, delay: open ? 0.16 : 0 }}
+        style={{ transformOrigin: `${C}px ${CY}px`, transformBox: 'view-box' }}
+      />
+    </g>
+  );
+}
+
+/* ---------------- tulip: a cup, not a starburst ---------------- */
+
+/**
+ * A tulip stays a cup even open — three petals leaning together rather than
+ * splaying flat. It's the most vertical, structured shape in the garden, which
+ * is why it reads as a calendar column before you've read the label.
+ */
+function Cup({ flower, open, petal, deep, ink, spring }: SubProps) {
+  const petals = [
+    { d: `M${C} ${CY + 12} C${C - 15} ${CY + 6} ${C - 14} ${CY - 16} ${C - 4} ${CY - 21} C${C - 1} ${CY - 12} ${C - 1} ${CY} ${C} ${CY + 12} Z`, lean: -16, fill: deep },
+    { d: `M${C} ${CY + 12} C${C + 15} ${CY + 6} ${C + 14} ${CY - 16} ${C + 4} ${CY - 21} C${C + 1} ${CY - 12} ${C + 1} ${CY} ${C} ${CY + 12} Z`, lean: 16, fill: deep },
+    { d: `M${C} ${CY + 12} C${C - 10} ${CY + 8} ${C - 10} ${CY - 18} ${C} ${CY - 24} C${C + 10} ${CY - 18} ${C + 10} ${CY + 8} ${C} ${CY + 12} Z`, lean: 0, fill: petal },
+  ];
+  return (
+    <g>
+      <Sepals flower={flower} open={open} ink={ink} />
+      {petals.map((p, i) => (
+        <motion.path
+          key={i}
+          d={p.d}
+          fill={p.fill}
+          stroke={ink}
+          strokeWidth={3}
+          strokeLinejoin="round"
+          initial={false}
+          animate={open
+            ? { rotate: p.lean, scaleX: 1, scaleY: 1, opacity: 1 }
+            : { rotate: 0, scaleX: 0.78, scaleY: 0.86, opacity: p.lean === 0 ? 1 : 0 }}
+          transition={{ ...spring, delay: open ? i * 0.05 : 0 }}
+          style={{ transformOrigin: `${C}px ${CY + 12}px`, transformBox: 'view-box' }}
+        />
+      ))}
+    </g>
+  );
+}
+
+/* ---------------- Jacob's ladder: rungs of leaflets, star blooms ---------------- */
+
+/**
+ * Jacob's ladder is named for its foliage — pairs of leaflets marching up the
+ * stem like rungs — so that, not the bloom, is what makes it recognisable. The
+ * rungs unfold bottom to top, which suits a category about learning in steps.
+ */
+function Ladder({ flower, open, petal, deep, centre, ink, spring }: SubProps) {
+  const rungs = 5;
+  const blooms: [number, number][] = [[0, -20], [-11, -13], [11, -13]];
+  return (
+    <g>
+      {/* the ladder */}
+      {Array.from({ length: rungs }, (_, i) => {
+        const y = CY + 20 - i * 7.5;
+        return (
+          <motion.g
+            key={i}
+            initial={false}
+            animate={open ? { scaleX: 1, opacity: 1 } : { scaleX: 0.3, opacity: 0.9 }}
+            transition={{ ...spring, delay: open ? (rungs - 1 - i) * 0.05 : i * 0.02 }}
+            style={{ transformOrigin: `${C}px ${y}px`, transformBox: 'view-box' }}
+          >
+            <path
+              d={`M${C} ${y} C${C - 9} ${y - 3} ${C - 13} ${y + 2} ${C - 15} ${y + 1}
+                  C${C - 12} ${y + 4} ${C - 7} ${y + 4} ${C} ${y} Z`}
+              fill={flower.palette.leaf}
+              stroke={ink}
+              strokeWidth={2}
+              strokeLinejoin="round"
+            />
+            <path
+              d={`M${C} ${y} C${C + 9} ${y - 3} ${C + 13} ${y + 2} ${C + 15} ${y + 1}
+                  C${C + 12} ${y + 4} ${C + 7} ${y + 4} ${C} ${y} Z`}
+              fill={flower.palette.leaf}
+              stroke={ink}
+              strokeWidth={2}
+              strokeLinejoin="round"
+            />
+          </motion.g>
+        );
+      })}
+
+      {/* small five-pointed blooms at the top */}
+      {blooms.map(([dx, dy], b) => (
+        <motion.g
+          key={b}
+          initial={false}
+          animate={open
+            ? { x: dx, y: dy, scale: 1, opacity: 1 }
+            : { x: 0, y: -8, scale: 0.6, opacity: b === 0 ? 1 : 0 }}
+          transition={{ ...spring, delay: open ? 0.16 + b * 0.05 : 0 }}
+          style={{ transformOrigin: `${C}px ${CY}px`, transformBox: 'view-box' }}
+        >
+          {Array.from({ length: 5 }, (_, i) => (
+            <ellipse
+              key={i}
+              cx={C}
+              cy={CY - 5}
+              rx={3.6}
+              ry={6}
+              fill={b === 0 ? petal : deep}
+              stroke={ink}
+              strokeWidth={1.9}
+              transform={`rotate(${72 * i} ${C} ${CY})`}
+            />
+          ))}
+          <circle cx={C} cy={CY} r={2.6} fill={centre} stroke={ink} strokeWidth={1.6} />
+        </motion.g>
+      ))}
+    </g>
+  );
+}
+
+/* ---------------- marigold: a dense pompom ---------------- */
+
+function Pompom({ flower, open, petal, deep, ink, spring }: SubProps) {
+  const rings = [
+    { n: 9, r: 18, size: 6.5, fill: deep },
+    { n: 7, r: 11, size: 6, fill: petal },
+    { n: 5, r: 5, size: 5.5, fill: deep },
+  ];
+  return (
+    <g>
+      <Sepals flower={flower} open={open} ink={ink} />
+      {rings.map((ring, ri) =>
+        Array.from({ length: ring.n }, (_, i) => {
+          const a = (i / ring.n) * Math.PI * 2 + ri * 0.4;
+          return (
+            <motion.circle
+              key={`${ri}-${i}`}
+              cx={C}
+              cy={CY}
+              r={ring.size}
+              fill={ring.fill}
+              stroke={ink}
+              strokeWidth={2}
+              initial={false}
+              animate={open
+                ? { x: Math.cos(a) * ring.r, y: Math.sin(a) * ring.r, scale: 1, opacity: 1 }
+                // one petal grown up into a round bud; the rest wait inside it
+                : { x: 0, y: -6, scale: 1.7, opacity: ri === 0 && i === 0 ? 1 : 0 }}
+              transition={{ ...spring, delay: open ? (ri * 4 + i) * 0.022 : 0 }}
+            />
+          );
+        }),
+      )}
+    </g>
+  );
+}
+
+/* ---------------- the green cup a bud sits in ---------------- */
+
+function Sepals({ flower, open, ink }: { flower: Flower; open: boolean; ink: string }) {
+  return (
+    <motion.g
+      initial={false}
+      animate={open ? { opacity: 0, scale: 0.5 } : { opacity: 1, scale: 1 }}
+      transition={{ duration: 0.22 }}
+      style={{ transformOrigin: `${C}px ${CY + 6}px`, transformBox: 'view-box' }}
     >
-      {/* wings first, so they sit behind */}
-      <motion.g
-        animate={{ scaleY: [1, 0.72, 1] }}
-        transition={{ duration: 0.22, repeat: Infinity, repeatDelay: 1.4 }}
-        style={{ transformOrigin: '20px 10px' }}
+      <path
+        d={`M${C} ${CY + 9} C${C - 11} ${CY + 7} ${C - 9} ${CY - 3} ${C - 3} ${CY + 1} Z`}
+        fill={flower.palette.leaf}
+        stroke={ink}
+        strokeWidth={2.2}
+        strokeLinejoin="round"
+      />
+      <path
+        d={`M${C} ${CY + 9} C${C + 11} ${CY + 7} ${C + 9} ${CY - 3} ${C + 3} ${CY + 1} Z`}
+        fill={flower.palette.leaf}
+        stroke={ink}
+        strokeWidth={2.2}
+        strokeLinejoin="round"
+      />
+    </motion.g>
+  );
+}
+
+/**
+ * A bee that wanders the whole garden.
+ *
+ * It drifts along a long looping path rather than sitting on one flower, and
+ * flips to face the direction of travel so it never flies backwards. Purely
+ * decorative, and `pointer-events: none` so it can never get in the way of a
+ * click.
+ */
+export function Bee({ size = 26, landAt = null }: {
+  size?: number;
+  /** where the favourite flower is, in % of the garden box — the bee stops there twice a lap */
+  landAt?: { x: number; y: number } | null;
+}) {
+  // A meandering circuit over the whole garden, in percentages of the box it's
+  // flying over. Where a point repeats the bee holds still for that leg, which
+  // is how it "lands" on the flower you plant from most.
+  const path = useMemo(() => {
+    const route: [number, number][] = [[8, 14], [60, 6], [88, 30], [36, 48], [72, 70], [14, 54], [46, 24]];
+    if (landAt) {
+      const stop: [number, number] = [landAt.x, landAt.y];
+      route.splice(5, 0, stop, stop);   // a long sit-down halfway round
+      route.push(stop, stop);           // and another before it loops
+    }
+    route.push(route[0]);               // close the loop so it doesn't jump
+
+    const n = route.length;
+    return {
+      left: route.map(([x]) => `${x}%`),
+      top: route.map(([, y]) => `${y}%`),
+      // face the way it's going, and tilt into the turn
+      scaleX: route.map(([x], i) => (route[Math.min(i + 1, n - 1)][0] >= x ? 1 : -1)),
+      rotate: route.map((_, i) => (i % 2 ? -8 : 8)),
+      times: route.map((_, i) => i / (n - 1)),
+    };
+  }, [landAt]);
+
+  return (
+    <motion.div
+      aria-hidden="true"
+      animate={{ left: path.left, top: path.top, scaleX: path.scaleX, rotate: path.rotate }}
+      transition={{
+        duration: landAt ? 46 : 34,
+        repeat: Infinity,
+        ease: 'easeInOut',
+        times: path.times,
+      }}
+      style={{ position: 'absolute', left: 0, top: 0, pointerEvents: 'none', zIndex: 6 }}
+    >
+      {/* a small bob on top of the drift, so it never travels in a straight line */}
+      <motion.div
+        animate={{ y: [0, -6, 0, 5, 0] }}
+        transition={{ duration: 3.4, repeat: Infinity, ease: 'easeInOut' }}
       >
-        <ellipse cx={15} cy={9} rx={7} ry={4.4} fill="#FFFDF6" fillOpacity={0.82} stroke="#4A3B35" strokeWidth={1.6} transform="rotate(-22 15 9)" />
-        <ellipse cx={25} cy={9} rx={7} ry={4.4} fill="#FFFDF6" fillOpacity={0.82} stroke="#4A3B35" strokeWidth={1.6} transform="rotate(22 25 9)" />
-      </motion.g>
-      <ellipse cx={20} cy={18} rx={10} ry={7.5} fill="#EFCE7B" stroke="#4A3B35" strokeWidth={2.1} />
-      <path d="M17 11.4a10 7.5 0 0 0 0 13.2M23 11.4a10 7.5 0 0 0 0 13.2" stroke="#4A3B35" strokeWidth={2} fill="none" />
-      <circle cx={11} cy={16} r={1.4} fill="#4A3B35" />
-      <path d="M9 12.5 6.5 9M13 11.5 12 7.5" stroke="#4A3B35" strokeWidth={1.5} strokeLinecap="round" />
-    </motion.svg>
+        <svg
+          width={size}
+          height={size * 0.8}
+          viewBox="0 0 40 32"
+          role="img"
+          aria-label="a bee, wandering the garden"
+          style={{ display: 'block', overflow: 'visible' }}
+        >
+          <motion.g
+            animate={{ scaleY: [1, 0.6, 1] }}
+            transition={{ duration: 0.16, repeat: Infinity }}
+            style={{ transformOrigin: '20px 10px' }}
+          >
+            <ellipse cx={15} cy={9} rx={7} ry={4.4} fill="#FFFDF6" fillOpacity={0.85} stroke="#4A3B35" strokeWidth={1.6} transform="rotate(-22 15 9)" />
+            <ellipse cx={25} cy={9} rx={7} ry={4.4} fill="#FFFDF6" fillOpacity={0.85} stroke="#4A3B35" strokeWidth={1.6} transform="rotate(22 25 9)" />
+          </motion.g>
+          <ellipse cx={20} cy={18} rx={10} ry={7.5} fill="#EFCE7B" stroke="#4A3B35" strokeWidth={2.1} />
+          <path d="M17 11.4a10 7.5 0 0 0 0 13.2M23 11.4a10 7.5 0 0 0 0 13.2" stroke="#4A3B35" strokeWidth={2} fill="none" />
+          <circle cx={11} cy={16} r={1.4} fill="#4A3B35" />
+          <path d="M9 12.5 6.5 9M13 11.5 12 7.5" stroke="#4A3B35" strokeWidth={1.5} strokeLinecap="round" />
+        </svg>
+      </motion.div>
+    </motion.div>
   );
 }

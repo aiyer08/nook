@@ -97,12 +97,11 @@ export function DecorLayer({ sectorId, editable }: { sectorId: ID; editable: boo
       style={{
         position: 'absolute', inset: 0,
         /**
-         * Normally tape sits *under* the widgets, like real tape under a card.
-         * While you're arranging it, the layer comes to the front — otherwise
-         * a strip dropped where a widget already is can never be grabbed.
+         * Tape sits on top of the widgets, the way tape actually does. It's
+         * click-through unless you're arranging, so a strip laid across a card
+         * decorates it without blocking anything underneath.
          */
-        zIndex: editable ? 9500 : 0,
-        // the container never swallows clicks; each piece opts in below
+        zIndex: 9500,
         pointerEvents: 'none',
       }}
     >
