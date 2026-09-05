@@ -108,16 +108,28 @@ easing so it ripples rather than snapping, and a tray of seed packets slides
 out beneath.
 
 All eleven are drawn by **one** parametric SVG component — petal count, petal
-silhouette, palette and growth form are data. Five growth forms cover the set:
-radial (tulip, daisy, sunflower, lotus, marigold, peony, poppy), cluster
-(forget-me-not, which scatters apart), spire (lavender, opening bottom to top),
-dome (hydrangea) and spiral (rose, each ring turned from the one behind).
+silhouette, palette and growth form are data. Eight growth forms keep them
+telling apart at a glance:
+
+| Form | Flowers |
+|---|---|
+| `circle` — a disc with six round petals, the plainest flower there is | Daisy (Tasks & Doing) |
+| `cup` — a few tall petals leaning together, still a cup when open | Tulip (Time & Planning) |
+| `pompom` — concentric rings of tiny petals | Marigold (Money) |
+| `ladder` — paired leaflets climbing the stem as rungs, star blooms on top | Jacob's ladder (Study & Knowledge) |
+| `cluster` — several small blooms that scatter apart | Forget-me-not (People) |
+| `dome` — a mound of florets | Hydrangea (Home & Places) |
+| `spiral` — coiled layers seen from above | Rose (Reflection) |
+| `single` — petals radiating from a centre, varied by count and silhouette | Sunflower, lotus, peony, poppy |
 
 Built: hover sway · staggered hinge bloom · seed-packet tray · a petal that
 drifts down and fades on close · search that wilts non-matching flowers rather
-than filtering them · a bee that lands on the flower you plant from most ·
-unbloomed grey-green buds for categories you haven't used · seasonal palette
-drift.
+than filtering them · a bee that roams the whole grid and sits down twice a lap
+on the flower you plant from most · unbloomed grey-green buds for categories you
+haven't used · seasonal palette drift.
+
+Lavender's spire was retired to make room for Jacob's ladder, which was asked
+for by name.
 
 Two deliberate departures:
 
@@ -127,3 +139,61 @@ Two deliberate departures:
 - **Watering and the pressed-flower archive aren't built.** Watering is the one
   idea in the plan that crosses from cute into nagging, and you flagged that
   yourself; pressing needs an archive feature that doesn't exist yet.
+
+---
+
+## The mouse, the growing garden, atmosphere, focus and Wrapped
+
+Five things that turn the app from a filing cabinet into somewhere to be.
+
+**The burrow.** The mascot lives in the corner of the page: a hole they peek out
+of, potter about in, tidy around and nap in, on a slow loop that never fully
+stops. Three jobs beyond being alive:
+
+- **Courier.** Drag a task onto them, open another tab, and they carry it there.
+  There's a button in the task's own detail too, because you can't drag with a
+  keyboard. The delivery makes a to-do list on the far side if the tab hasn't
+  got one, so it can't fail into nothing.
+- **Hide and seek.** Once a day they tuck behind one of your widgets and the
+  burrow is empty. The tail pokes out from behind the card; find it and you get
+  a sticker and a seed.
+
+**The garden grows.** Every five finished things earns a seed; seeds are planted
+on their own page (`G`) and grow over weeks. A plant's stage is *derived* from
+the day it went in plus the distinct days you watered it — nothing stores
+"stage 3" — so it keeps growing while the app is closed, back-filling works, and
+there's no number to reset. Nothing is ever removed: a missed week slows the
+garden, it doesn't empty it.
+
+**Atmosphere.** Real weather from Open-Meteo (no key, `Access-Control-Allow-Origin: *`
+verified against the live endpoint) drawn onto the page: rain falls over the
+board, snow settles in a wobbly cap along the top edge of every widget, fog
+hazes the edges, a storm flashes now and then. The location is a rough town —
+browser geolocation rounded to two decimals, or typed by name. Cozy sound is
+three synthesised loops (rain, café, fireplace): noise through a filter, no
+files to download, off by default and faded in over a second. Lamplight after
+dark is a warm pool over the middle with dimmer edges.
+
+**Cozy focus.** Start it from a widget's menu or a task (the length comes from
+the effort tag you already set). Everything dims but the widget you're in, rain
+starts on the paper, the mouse curls up and sleeps beside the timer, and a
+seedling grows through the session. Leave early and it stays a sprout — that is
+the entire penalty. No lost streak, no red text.
+
+**Nook Wrapped.** Things finished, the longest run *and* the best you ever had,
+your busiest week and biggest day, month by month, the year as a strip of mood
+colour with grey for days you didn't say, the flower you reached for most, and
+the quiet numbers (seeds planted, flowers in bloom, hours focused, times you
+found the mouse). Every figure is computed from what was already saved, so a
+thin year says so plainly rather than inventing something.
+
+### Still not built
+
+- **Watering is in, pressing is not.** The pressed-flower archive still needs an
+  archive feature that doesn't exist. Watering turned out fine once it was worth
+  a day of growth rather than a daily obligation — skipping it just means the
+  plant grows at its own pace.
+- **Wrapped isn't shareable yet.** It reads well and it's built to be posted,
+  but there's no image export; that wants a canvas render of the slides.
+- **"Things finished" counts tasks, not tracker ticks.** A habit grid's squares
+  feed the mood strip, not the headline number.
