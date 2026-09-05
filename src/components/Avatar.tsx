@@ -73,7 +73,9 @@ export function Avatar({
       <motion.g
         animate={bodyAnim}
         transition={bodyTransition}
-        style={{ originX: '60px', originY: '100px' }}
+        // fractions of the 120-unit viewBox: px values make framer switch to
+        // fill-box, which measures from the shape's own corner instead
+        style={{ originX: 0.5, originY: 100 / 120, transformBox: 'view-box' }}
       >
         {/* ---- ears / head extras behind the head ---- */}
         <Ears species={species} color={color} inner={inner} ink={ink} mood={mood} />
@@ -138,7 +140,7 @@ export function Avatar({
         <motion.g
           animate={{ opacity: [0, 1, 0], scale: [0.6, 1.1, 0.7] }}
           transition={{ duration: 1.1, repeat: Infinity, repeatDelay: 0.2 }}
-          style={{ originX: '60px', originY: '30px' }}
+          style={{ originX: 0.5, originY: 30 / 120, transformBox: 'view-box' }}
         >
           <Sparkle x={24} y={30} r={5} c={ink} />
           <Sparkle x={96} y={26} r={6} c={ink} />

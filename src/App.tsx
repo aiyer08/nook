@@ -196,7 +196,13 @@ export default function App() {
               transition={{ type: 'spring', stiffness: 300, damping: 30 }}
               style={{
                 flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column',
-                transformOrigin: direction > 0 ? 'left center' : 'right center',
+                /*
+                  originX rather than transformOrigin: framer owns the
+                  transform and overwrites the CSS property, so the page used
+                  to swing from its middle instead of the edge you came from.
+                */
+                originX: direction > 0 ? 0 : 1,
+                originY: 0.5,
                 transformStyle: turn ? 'preserve-3d' : undefined,
               }}
             >

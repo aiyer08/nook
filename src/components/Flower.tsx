@@ -19,6 +19,24 @@ import { mix } from '../lib/themes';
 const C = 50;      // the flower's middle, in viewBox units
 const CY = 40;     // slightly above centre, to leave room for the stem
 
+/**
+ * A hinge, written the way framer-motion actually honours.
+ *
+ * Setting `transformOrigin` in `style` *looks* right and silently does
+ * nothing: framer owns the transform and overwrites it with its own
+ * `50% 50%`, which against the view-box is the middle of the **box** — ten
+ * units below where every petal's base really is. So the whole ring of petals
+ * swung around a point underneath the bloom while the middle stayed put, which
+ * is why the centre and the petals didn't agree. Passing originX/originY as
+ * fractions of the viewBox is the supported route, and framer leaves
+ * `transform-box` alone.
+ */
+export const hinge = (x: number, y: number, box = 100) => ({
+  originX: x / box,
+  originY: y / box,
+  transformBox: 'view-box' as const,
+});
+
 /** Forms whose petals all meet in the middle, and so need a pad behind them. */
 const CUPPED = new Set<Flower['form']>(['single', 'circle', 'pompom', 'spiral']);
 
@@ -102,7 +120,7 @@ export const FlowerSvg = memo(function FlowerSvg({
       <motion.g
         animate={animate ? { rotate: wilted ? 9 : 0 } : undefined}
         transition={{ duration: 0.5 }}
-        style={{ transformOrigin: '50px 96px' }}
+        style={hinge(C, 96)}
       >
         {/*
           Two pieces of stem, and the reason is worth writing down.
@@ -197,7 +215,7 @@ export const FlowerSvg = memo(function FlowerSvg({
           initial={false}
           animate={open ? { scale: 1, opacity: 1 } : { scale: 0.2, opacity: 0 }}
           transition={{ ...spring, delay: open ? 0.04 : 0 }}
-          style={{ transformOrigin: `${C}px ${CY}px`, transformBox: 'view-box' }}
+          style={hinge(C, CY)}
         />
       )}
 
@@ -239,7 +257,7 @@ function BudShape({
       initial={false}
       animate={open ? { opacity: 0, scale: 0.55 } : { opacity: 1, scale: 1 }}
       transition={{ duration: 0.2 }}
-      style={{ transformOrigin: `${C}px ${CY}px`, transformBox: 'view-box' }}
+      style={hinge(C, CY)}
     >
       <path
         d={`M${C} ${CY + 12} C${C - 12} ${CY + 6} ${C - 11} ${CY - 14} ${C} ${CY - 20}
@@ -297,7 +315,7 @@ function Radial({ flower, open, petal, deep, centre, ink, spring }: SubProps) {
         initial={false}
         animate={open ? { opacity: 0, scale: 0.5 } : { opacity: 1, scale: 1 }}
         transition={{ duration: 0.22 }}
-        style={{ transformOrigin: `${C}px ${CY + 6}px`, transformBox: 'view-box' }}
+        style={hinge(C, CY + 6)}
       >
         <path
           d={`M${C} ${CY + 9} C${C - 11} ${CY + 7} ${C - 9} ${CY - 3} ${C - 3} ${CY + 1} Z`}
@@ -354,7 +372,7 @@ function Radial({ flower, open, petal, deep, centre, ink, spring }: SubProps) {
                   }
                   transition={{ ...spring, delay: open ? (i + layer * 2) * 0.04 : (n - i) * 0.014 }}
                   /* the hinge: exactly where the petal meets the middle */
-                  style={{ transformOrigin: `${C}px ${CY}px`, transformBox: 'view-box' }}
+                  style={hinge(C, CY)}
                 />
               );
             })}
@@ -367,7 +385,7 @@ function Radial({ flower, open, petal, deep, centre, ink, spring }: SubProps) {
         initial={false}
         animate={open ? { scale: 1, opacity: 1 } : { scale: 0.15, opacity: 0 }}
         transition={{ ...spring, delay: open ? 0.14 : 0 }}
-        style={{ transformOrigin: `${C}px ${CY}px`, transformBox: 'view-box' }}
+        style={hinge(C, CY)}
       >
         <circle cx={C} cy={CY} r={flower.species === 'Sunflower' ? 12 : 8} fill={centre} stroke={ink} strokeWidth={2.8} />
         {/* seeds, echoing the filled-in squares of a tracker grid */}
@@ -400,7 +418,7 @@ function Cluster({ flower, open, petal, deep, centre, ink, spring }: SubProps) {
             // closed: the drawn bud stands in for the whole cluster
             : { x: 0, y: 0, scale: 0.5, opacity: 0 }}
           transition={{ ...spring, delay: open ? b * 0.045 : (spots.length - b) * 0.02 }}
-          style={{ transformOrigin: `${C}px ${CY}px`, transformBox: 'view-box' }}
+          style={hinge(C, CY)}
         >
           {Array.from({ length: flower.petals }, (_, i) => (
             <path
@@ -437,7 +455,7 @@ function Dome({ flower, open, petal, deep, centre, ink, spring }: SubProps) {
             ? { x: dx, y: dy, scale: 1, opacity: 1 }
             : { x: 0, y: 0, scale: 0.5, opacity: 0 }}
           transition={{ ...spring, delay: open ? b * 0.035 : (spots.length - b) * 0.015 }}
-          style={{ transformOrigin: `${C}px ${CY}px`, transformBox: 'view-box' }}
+          style={hinge(C, CY)}
         >
           {Array.from({ length: flower.petals }, (_, i) => (
             <path
@@ -483,7 +501,7 @@ function Spiral({ flower, open, petal, deep, centre, ink, spring }: SubProps) {
                   // closed: one ring, stacked, so the coil doesn't muddy
                   : { rotate: 0, scale: 0.46, opacity: layer === 0 ? 1 : 0 }}
                 transition={{ ...spring, delay: open ? (layer * n + i) * 0.028 : 0.01 * i }}
-                style={{ transformOrigin: `${C}px ${CY}px`, transformBox: 'view-box' }}
+                style={hinge(C, CY)}
               />
             ))}
           </g>
@@ -574,7 +592,7 @@ function CirclePetals({ flower, open, petal, deep, centre, ink, spring }: SubPro
         initial={false}
         animate={open ? { scale: 1, opacity: 1 } : { scale: 0.2, opacity: 0 }}
         transition={{ ...spring, delay: open ? 0.16 : 0 }}
-        style={{ transformOrigin: `${C}px ${CY}px`, transformBox: 'view-box' }}
+        style={hinge(C, CY)}
       />
     </g>
   );
@@ -609,7 +627,7 @@ function Cup({ flower, open, petal, deep, ink, spring }: SubProps) {
             ? { rotate: p.lean, scaleX: 1, scaleY: 1, opacity: 1 }
             : { rotate: 0, scaleX: 0.78, scaleY: 0.86, opacity: p.lean === 0 ? 1 : 0 }}
           transition={{ ...spring, delay: open ? i * 0.05 : 0 }}
-          style={{ transformOrigin: `${C}px ${CY + 12}px`, transformBox: 'view-box' }}
+          style={hinge(C, CY + 12)}
         />
       ))}
     </g>
@@ -638,7 +656,7 @@ function Ladder({ flower, open, petal, deep, centre, ink, spring }: SubProps) {
         initial={false}
         animate={open ? { opacity: 1, scaleY: 1 } : { opacity: 1, scaleY: 0.55 }}
         transition={spring}
-        style={{ transformOrigin: `${C}px ${CY + 22}px`, transformBox: 'view-box' }}
+        style={hinge(C, CY + 22)}
       />
 
       {/* the ladder */}
@@ -650,7 +668,7 @@ function Ladder({ flower, open, petal, deep, centre, ink, spring }: SubProps) {
             initial={false}
             animate={open ? { scaleX: 1, opacity: 1 } : { scaleX: 0.3, opacity: 0.9 }}
             transition={{ ...spring, delay: open ? (rungs - 1 - i) * 0.05 : i * 0.02 }}
-            style={{ transformOrigin: `${C}px ${y}px`, transformBox: 'view-box' }}
+            style={hinge(C, y)}
           >
             <path
               d={`M${C} ${y} C${C - 9} ${y - 3} ${C - 13} ${y + 2} ${C - 15} ${y + 1}
@@ -681,7 +699,7 @@ function Ladder({ flower, open, petal, deep, centre, ink, spring }: SubProps) {
             ? { x: dx, y: dy, scale: 1, opacity: 1 }
             : { x: 0, y: -8, scale: 0.6, opacity: b === 0 ? 1 : 0 }}
           transition={{ ...spring, delay: open ? 0.16 + b * 0.05 : 0 }}
-          style={{ transformOrigin: `${C}px ${CY}px`, transformBox: 'view-box' }}
+          style={hinge(C, CY)}
         >
           {Array.from({ length: 5 }, (_, i) => (
             <ellipse
@@ -748,7 +766,7 @@ function Sepals({ flower, open, ink }: { flower: Flower; open: boolean; ink: str
       initial={false}
       animate={open ? { opacity: 0, scale: 0.5 } : { opacity: 1, scale: 1 }}
       transition={{ duration: 0.22 }}
-      style={{ transformOrigin: `${C}px ${CY + 6}px`, transformBox: 'view-box' }}
+      style={hinge(C, CY + 6)}
     >
       <path
         d={`M${C} ${CY + 9} C${C - 11} ${CY + 7} ${C - 9} ${CY - 3} ${C - 3} ${CY + 1} Z`}
@@ -832,7 +850,7 @@ export function Bee({ size = 26, landAt = null }: {
           <motion.g
             animate={{ scaleY: [1, 0.6, 1] }}
             transition={{ duration: 0.16, repeat: Infinity }}
-            style={{ transformOrigin: '20px 10px' }}
+            style={{ ...hinge(20, 10, 40), originY: 10 / 32 }}
           >
             <ellipse cx={15} cy={9} rx={7} ry={4.4} fill="#FFFDF6" fillOpacity={0.85} stroke="#4A3B35" strokeWidth={1.6} transform="rotate(-22 15 9)" />
             <ellipse cx={25} cy={9} rx={7} ry={4.4} fill="#FFFDF6" fillOpacity={0.85} stroke="#4A3B35" strokeWidth={1.6} transform="rotate(22 25 9)" />

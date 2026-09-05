@@ -13,7 +13,7 @@ import { useMemo, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { Panel } from './ui';
 import { Icon } from './Icons';
-import { FlowerSvg } from './Flower';
+import { FlowerSvg, hinge } from './Flower';
 import { HideHint } from './Burrow';
 import { GARDEN, flowerById } from '../lib/garden';
 import { STAGE_NAME, canWater, daysToNextStage, growthDays, stageOf, towardNextSeed, type Stage } from '../lib/growth';
@@ -303,7 +303,7 @@ export function Seedling({
         <motion.g
           animate={animate ? { rotate: [0, -1.6, 1.6, 0] } : undefined}
           transition={{ duration: 5, repeat: Infinity, ease: 'easeInOut' }}
-          style={{ transformOrigin: '50px 94px' }}
+          style={hinge(50, 94)}
         >
           <path
             d={stage === 1 ? 'M50 94 V76' : 'M50 94 Q47 74 50 60'}
