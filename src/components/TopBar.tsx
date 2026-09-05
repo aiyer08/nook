@@ -26,6 +26,8 @@ export function TopBar() {
   const penWidth = useUI((s) => s.penWidth);
   const setPen = useUI((s) => s.setPen);
   const mood = useUI((s) => s.avatarMood);
+  const decorating = useUI((s) => s.decorating);
+  const setDecorating = useUI((s) => s.setDecorating);
 
   const [penOpen, setPenOpen] = useState(false);
   const [decorOpen, setDecorOpen] = useState(false);
@@ -46,11 +48,18 @@ export function TopBar() {
   useEffect(() => {
     if (!decorOpen) return;
     const close = (e: MouseEvent) => {
-      if (!decorRef.current?.contains(e.target as Node)) setDecorOpen(false);
+      // clicking on the board is how you drag tape, so only the toolbar and
+      // the panels close the drawer
+      const el = e.target as Node;
+      if (decorRef.current?.contains(el)) return;
+      if ((el as HTMLElement).closest?.('header')) {
+        setDecorOpen(false);
+        setDecorating(false);
+      }
     };
     window.addEventListener('mousedown', close);
     return () => window.removeEventListener('mousedown', close);
-  }, [decorOpen]);
+  }, [decorOpen, setDecorating]);
 
   const switchTab = (id: string) => {
     if (id === active) return;
@@ -154,8 +163,14 @@ export function TopBar() {
         {/* the decoration drawer */}
         <div style={{ position: 'relative' }} ref={decorRef}>
           <button
-            className={`btn icon ${decorOpen ? 'primary' : ''}`}
-            onClick={() => setDecorOpen((v) => !v)}
+            className={`btn icon ${decorOpen || decorating ? 'primary' : ''}`}
+            onClick={() => {
+              const next = !decorOpen;
+              setDecorOpen(next);
+              // opening the drawer puts you in arranging mode, so anything you
+              // lay down is immediately grabbable
+              setDecorating(next);
+            }}
             aria-label="Tape and stickers"
             aria-expanded={decorOpen}
             title="Washi tape and stickers"
@@ -193,6 +208,28 @@ export function TopBar() {
           <Icon name="gear" size={17} />
         </button>
       </div>
+
+      {/* a way out of arranging mode that doesn't require finding the button again */}
+      {decorating && (
+        <div
+          style={{
+            display: 'flex', alignItems: 'center', gap: 8,
+            padding: '5px 14px', background: 'var(--accent-tint)',
+            borderTop: '2px dashed var(--line)', fontSize: 12,
+          }}
+        >
+          <Icon name="sparkle" size={14} color="var(--ink-soft)" />
+          <span style={{ flex: 1 }}>
+            Arranging tape and stickers — drag them about. Widgets are held still meanwhile.
+          </span>
+          <button
+            className="btn tiny primary"
+            onClick={() => { setDecorating(false); setDecorOpen(false); }}
+          >
+            Done
+          </button>
+        </div>
+      )}
 
       {/* row 2 — tabs */}
       <div

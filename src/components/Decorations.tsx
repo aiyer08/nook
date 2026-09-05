@@ -95,8 +95,15 @@ export function DecorLayer({ sectorId, editable }: { sectorId: ID; editable: boo
   return (
     <div
       style={{
-        position: 'absolute', inset: 0, zIndex: 0,
-        pointerEvents: editable ? 'none' : 'none',
+        position: 'absolute', inset: 0,
+        /**
+         * Normally tape sits *under* the widgets, like real tape under a card.
+         * While you're arranging it, the layer comes to the front — otherwise
+         * a strip dropped where a widget already is can never be grabbed.
+         */
+        zIndex: editable ? 9500 : 0,
+        // the container never swallows clicks; each piece opts in below
+        pointerEvents: 'none',
       }}
     >
       <AnimatePresence>
@@ -233,23 +240,30 @@ function StickerMark({ dec }: { dec: Decoration }) {
 
 export function DecorDrawer({ sectorId }: { sectorId: ID }) {
   const add = useDoc((s) => s.addDecoration);
+  const existing = useDoc((s) => s.doc.decorations);
   const completed = useDoc((s) => s.doc.stats.completed);
   const toast = useUI((s) => s.toast);
+  const setDecorating = useUI((s) => s.setDecorating);
   const [tab, setTab] = useState<'tape' | 'sticker'>('tape');
   const [color, setColor] = useState<string | undefined>();
 
   const place = (kind: 'tape' | 'sticker', variant: string) => {
-    // drop it somewhere visible but slightly random, so two never stack exactly
+    // Cascade down-right from a fixed corner rather than dropping at random:
+    // random placement kept landing pieces on top of each other, and a random
+    // position is impossible to predict or to find again.
+    const mine = existing.filter((d) => d.sectorId === sectorId).length;
     add({
       sectorId, kind, variant,
-      x: 60 + Math.round(Math.random() * 220),
-      y: 60 + Math.round(Math.random() * 180),
-      rotation: Math.round((Math.random() * 24 - 12) * 10) / 10,
+      x: 40 + (mine % 8) * 26,
+      y: 40 + (mine % 8) * 22,
+      rotation: ((mine * 37) % 25) - 12,
       length: kind === 'tape' ? 130 : undefined,
       scale: kind === 'sticker' ? 1 : undefined,
       color,
     });
-    toast(kind === 'tape' ? 'Tape down. Drag it about.' : 'Stuck on. Drag it about.');
+    // arranging mode, or the new piece is behind a widget and ungrabbable
+    setDecorating(true);
+    toast(kind === 'tape' ? 'Tape down — drag it where you want it.' : 'Stuck on — drag it where you want it.');
   };
 
   const locked = STICKERS.filter((s) => s.at > completed);

@@ -7,7 +7,8 @@ import { Onboarding } from './components/Onboarding';
 import { TopBar } from './components/TopBar';
 import { Board } from './components/Board';
 import { TodayView } from './components/TodayView';
-import { AvatarPanel, SectorsPanel, SettingsPanel, WidgetPicker } from './components/Panels';
+import { AvatarPanel, SectorsPanel, SettingsPanel } from './components/Panels';
+import { GardenPicker } from './components/Garden';
 import { CalendarSyncPanel, useAutoSync } from './components/CalendarSync';
 import { Confetti, Empty, Toasts } from './components/ui';
 import { Icon } from './components/Icons';
@@ -192,7 +193,7 @@ export default function App() {
         </AnimatePresence>
       </div>
 
-      <WidgetPicker open={panel === 'widgets'} onClose={() => setPanel(null)} />
+      <GardenPicker open={panel === 'widgets'} onClose={() => setPanel(null)} />
       <SettingsPanel open={panel === 'settings'} onClose={() => setPanel(null)} />
       <AvatarPanel open={panel === 'avatar'} onClose={() => setPanel(null)} />
       <SectorsPanel open={panel === 'sectors'} onClose={() => setPanel(null)} />

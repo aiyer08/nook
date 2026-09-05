@@ -95,3 +95,35 @@ Same result, no backend. Verified against both registries.
 Both exist as collections and work, but the map-with-pins and the
 ingredients-to-shopping-list generation aren't there. Those are real features,
 not styling — worth their own pass.
+
+
+---
+
+## The garden picker
+
+The widget picker is now eleven flowers. Each is a folder: closed it's a bud on
+a stem with the category in handwriting and a dewdrop holding the count; click
+and the petals swing open on their hinges, staggered 40ms apart with spring
+easing so it ripples rather than snapping, and a tray of seed packets slides
+out beneath.
+
+All eleven are drawn by **one** parametric SVG component — petal count, petal
+silhouette, palette and growth form are data. Five growth forms cover the set:
+radial (tulip, daisy, sunflower, lotus, marigold, peony, poppy), cluster
+(forget-me-not, which scatters apart), spire (lavender, opening bottom to top),
+dome (hydrangea) and spiral (rose, each ring turned from the one behind).
+
+Built: hover sway · staggered hinge bloom · seed-packet tray · a petal that
+drifts down and fades on close · search that wilts non-matching flowers rather
+than filtering them · a bee that lands on the flower you plant from most ·
+unbloomed grey-green buds for categories you haven't used · seasonal palette
+drift.
+
+Two deliberate departures:
+
+- **The category name sits under the flower, not on the leaf.** At the size a
+  leaf actually occupies (~20px in a 104px bloom) handwritten text was
+  illegible. The handwriting is kept; the position moved.
+- **Watering and the pressed-flower archive aren't built.** Watering is the one
+  idea in the plan that crosses from cute into nagging, and you flagged that
+  yourself; pressing needs an archive feature that doesn't exist yet.

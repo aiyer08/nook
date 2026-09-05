@@ -274,6 +274,8 @@ interface UIState {
   panel: null | 'settings' | 'avatar' | 'widgets' | 'sectors' | 'calendars';
   selectedWidget: ID | null;
   dragging: boolean;
+  /** arranging tape and stickers: the decor layer comes to the front */
+  decorating: boolean;
   toasts: Toast[];
   celebrate: number;      // bumps to fire confetti
   avatarMood: 'idle' | 'happy' | 'cheer' | 'sleepy' | 'stretch';
@@ -284,6 +286,7 @@ interface UIState {
   setPanel: (p: UIState['panel']) => void;
   select: (id: ID | null) => void;
   setDragging: (v: boolean) => void;
+  setDecorating: (v: boolean) => void;
   toast: (message: string, kind?: Toast['kind']) => void;
   dismiss: (id: string) => void;
   cheer: () => void;
@@ -298,6 +301,7 @@ export const useUI = create<UIState>((set, get) => ({
   panel: null,
   selectedWidget: null,
   dragging: false,
+  decorating: false,
   toasts: [],
   celebrate: 0,
   avatarMood: 'idle',
@@ -308,6 +312,7 @@ export const useUI = create<UIState>((set, get) => ({
   setPanel: (panel) => set({ panel }),
   select: (selectedWidget) => set({ selectedWidget }),
   setDragging: (dragging) => set({ dragging }),
+  setDecorating: (decorating) => set({ decorating }),
   toast: (message, kind = 'info') => {
     const id = uid();
     set({ toasts: [...get().toasts, { id, message, kind }] });

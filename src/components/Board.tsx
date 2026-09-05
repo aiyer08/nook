@@ -19,6 +19,7 @@ export function Board({ sector }: { sector: Sector }) {
   const patchData = useDoc((s) => s.patchWidgetData);
   const tool = useUI((s) => s.tool);
   const dragging = useUI((s) => s.dragging);
+  const decorating = useUI((s) => s.decorating);
   const setPanel = useUI((s) => s.setPanel);
   const select = useUI((s) => s.select);
   const toast = useUI((s) => s.toast);
@@ -115,7 +116,7 @@ export function Board({ sector }: { sector: Sector }) {
         <div className={`grid-hint ${dragging && sector.snap ? 'show' : ''}`} />
 
         {/* tape and stickers sit under the widgets, like real tape under a card */}
-        <DecorLayer sectorId={sector.id} editable={!drawing} />
+        <DecorLayer sectorId={sector.id} editable={decorating} />
 
         {widgets.length === 0 && (
           <div style={{ position: 'absolute', inset: 0, display: 'grid', placeItems: 'center', pointerEvents: 'none' }}>
@@ -131,7 +132,7 @@ export function Board({ sector }: { sector: Sector }) {
         )}
 
         {widgets.map((w) => (
-          <WidgetFrame key={w.id} widget={w} sector={sector} locked={drawing}>
+          <WidgetFrame key={w.id} widget={w} sector={sector} locked={drawing || decorating}>
             <WidgetBody widget={w} sector={sector} />
           </WidgetFrame>
         ))}
