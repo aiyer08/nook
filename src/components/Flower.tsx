@@ -164,6 +164,58 @@ export const FlowerSvg = memo(function FlowerSvg({
   );
 });
 
+/**
+ * An explicit bud, for the cluster and dome forms.
+ *
+ * Radial and spiral flowers make their own bud by stacking every petal at the
+ * same angle. A cluster of five separate blooms can't do that — collapsing
+ * them just gives a small open flower — so those two get a drawn bud that
+ * cross-fades as the cluster scatters.
+ */
+function BudShape({
+  open, petal, leaf, ink,
+}: { open: boolean; petal: string; leaf: string; ink: string }) {
+  return (
+    <motion.g
+      initial={false}
+      animate={open ? { opacity: 0, scale: 0.55 } : { opacity: 1, scale: 1 }}
+      transition={{ duration: 0.2 }}
+      style={{ transformOrigin: `${C}px ${CY}px`, transformBox: 'view-box' }}
+    >
+      <path
+        d={`M${C} ${CY + 12} C${C - 12} ${CY + 6} ${C - 11} ${CY - 14} ${C} ${CY - 20}
+            C${C + 11} ${CY - 14} ${C + 12} ${CY + 6} ${C} ${CY + 12} Z`}
+        fill={petal}
+        stroke={ink}
+        strokeWidth={3}
+        strokeLinejoin="round"
+      />
+      {/* a seam, so it reads as folded petals rather than an egg */}
+      <path
+        d={`M${C} ${CY + 8} C${C - 4} ${CY - 4} ${C - 3} ${CY - 12} ${C} ${CY - 18}`}
+        stroke={ink}
+        strokeWidth={1.8}
+        fill="none"
+        opacity={0.55}
+      />
+      <path
+        d={`M${C} ${CY + 11} C${C - 10} ${CY + 8} ${C - 9} ${CY - 1} ${C - 3} ${CY + 3} Z`}
+        fill={leaf}
+        stroke={ink}
+        strokeWidth={2.1}
+        strokeLinejoin="round"
+      />
+      <path
+        d={`M${C} ${CY + 11} C${C + 10} ${CY + 8} ${C + 9} ${CY - 1} ${C + 3} ${CY + 3} Z`}
+        fill={leaf}
+        stroke={ink}
+        strokeWidth={2.1}
+        strokeLinejoin="round"
+      />
+    </motion.g>
+  );
+}
+
 type SubProps = {
   flower: Flower;
   open: boolean;
@@ -180,6 +232,30 @@ function Radial({ flower, open, petal, deep, centre, ink, spring }: SubProps) {
   const rings = Array.from({ length: flower.layers }, (_, l) => l);
   return (
     <g>
+      {/* sepals: the little green cup a bud sits in. Only while closed —
+          they're what makes a bud read as a bud rather than a blob. */}
+      <motion.g
+        initial={false}
+        animate={open ? { opacity: 0, scale: 0.5 } : { opacity: 1, scale: 1 }}
+        transition={{ duration: 0.22 }}
+        style={{ transformOrigin: `${C}px ${CY + 6}px`, transformBox: 'view-box' }}
+      >
+        <path
+          d={`M${C} ${CY + 9} C${C - 11} ${CY + 7} ${C - 9} ${CY - 3} ${C - 3} ${CY + 1} Z`}
+          fill={flower.palette.leaf}
+          stroke={ink}
+          strokeWidth={2.2}
+          strokeLinejoin="round"
+        />
+        <path
+          d={`M${C} ${CY + 9} C${C + 11} ${CY + 7} ${C + 9} ${CY - 3} ${C + 3} ${CY + 1} Z`}
+          fill={flower.palette.leaf}
+          stroke={ink}
+          strokeWidth={2.2}
+          strokeLinejoin="round"
+        />
+      </motion.g>
+
       {rings.map((layer) => {
         const back = layer > 0;
         const scale = 1 - layer * 0.22;
@@ -191,7 +267,6 @@ function Radial({ flower, open, petal, deep, centre, ink, spring }: SubProps) {
         return (
           <g key={layer}>
             {Array.from({ length: n }, (_, i) => {
-              // where this petal ends up when open
               const angle = flower.spread >= 85
                 ? (360 / n) * i + offset
                 : (i - (n - 1) / 2) * (flower.spread / Math.max(1, n - 1)) * 1.9;
@@ -208,10 +283,17 @@ function Radial({ flower, open, petal, deep, centre, ink, spring }: SubProps) {
                   animate={
                     open
                       ? { rotate: angle + wonk, scaleX: 1, scaleY: 1, opacity: 1 }
-                      // closed: folded inward into a bud, narrow and short
-                      : { rotate: (angle - 180) * 0.06 + wonk * 0.2, scaleX: 0.48, scaleY: 0.62, opacity: 1 }
+                      /**
+                       * Closed, every petal points straight up at exactly the
+                       * same angle so they land on top of one another and read
+                       * as one chunky bud. Fanning them even slightly stacks a
+                       * dozen outlines into a dark smudge — which is precisely
+                       * what went wrong before. Back rings are hidden for the
+                       * same reason.
+                       */
+                      : { rotate: 0, scaleX: 0.66, scaleY: 0.84, opacity: back ? 0 : 1 }
                   }
-                  transition={{ ...spring, delay: open ? (i + layer * 2) * 0.04 : (n - i) * 0.018 }}
+                  transition={{ ...spring, delay: open ? (i + layer * 2) * 0.04 : (n - i) * 0.014 }}
                   /* the hinge: exactly where the petal meets the middle */
                   style={{ transformOrigin: `${C}px ${CY}px`, transformBox: 'view-box' }}
                 />
@@ -221,11 +303,11 @@ function Radial({ flower, open, petal, deep, centre, ink, spring }: SubProps) {
         );
       })}
 
-      {/* the middle, drawn last so petals tuck behind it */}
+      {/* the middle. Hidden while closed, or it eclipses the bud. */}
       <motion.g
         initial={false}
-        animate={open ? { scale: 1 } : { scale: 0.72 }}
-        transition={{ ...spring, delay: open ? 0.1 : 0 }}
+        animate={open ? { scale: 1, opacity: 1 } : { scale: 0.15, opacity: 0 }}
+        transition={{ ...spring, delay: open ? 0.14 : 0 }}
         style={{ transformOrigin: `${C}px ${CY}px`, transformBox: 'view-box' }}
       >
         <circle cx={C} cy={CY} r={flower.species === 'Sunflower' ? 12 : 8} fill={centre} stroke={ink} strokeWidth={2.8} />
@@ -249,11 +331,15 @@ function Cluster({ flower, open, petal, deep, centre, ink, spring }: SubProps) {
   const spots: [number, number][] = [[0, -8], [-13, 0], [13, 0], [-7, 12], [8, 12]];
   return (
     <g>
+      <BudShape open={open} petal={petal} leaf={flower.palette.leaf} ink={ink} />
       {spots.map(([dx, dy], b) => (
         <motion.g
           key={b}
           initial={false}
-          animate={open ? { x: dx, y: dy, scale: 1 } : { x: dx * 0.18, y: dy * 0.18, scale: 0.66 }}
+          animate={open
+            ? { x: dx, y: dy, scale: 1, opacity: 1 }
+            // closed: the drawn bud stands in for the whole cluster
+            : { x: 0, y: 0, scale: 0.5, opacity: 0 }}
           transition={{ ...spring, delay: open ? b * 0.045 : (spots.length - b) * 0.02 }}
           style={{ transformOrigin: `${C}px ${CY}px`, transformBox: 'view-box' }}
         >
@@ -320,11 +406,14 @@ function Dome({ flower, open, petal, deep, centre, ink, spring }: SubProps) {
   ];
   return (
     <g>
+      <BudShape open={open} petal={petal} leaf={flower.palette.leaf} ink={ink} />
       {spots.map(([dx, dy], b) => (
         <motion.g
           key={b}
           initial={false}
-          animate={open ? { x: dx, y: dy, scale: 1 } : { x: dx * 0.22, y: dy * 0.22, scale: 0.6 }}
+          animate={open
+            ? { x: dx, y: dy, scale: 1, opacity: 1 }
+            : { x: 0, y: 0, scale: 0.5, opacity: 0 }}
           transition={{ ...spring, delay: open ? b * 0.035 : (spots.length - b) * 0.015 }}
           style={{ transformOrigin: `${C}px ${CY}px`, transformBox: 'view-box' }}
         >
@@ -368,8 +457,9 @@ function Spiral({ flower, open, petal, deep, centre, ink, spring }: SubProps) {
                 initial={false}
                 animate={open
                   // each ring turned a little from the one behind: a coil
-                  ? { rotate: (360 / n) * i + layer * 26, scale: 1 }
-                  : { rotate: (360 / n) * i * 0.12 + layer * 8, scale: 0.5 }}
+                  ? { rotate: (360 / n) * i + layer * 26, scale: 1, opacity: 1 }
+                  // closed: one ring, stacked, so the coil doesn't muddy
+                  : { rotate: 0, scale: 0.46, opacity: layer === 0 ? 1 : 0 }}
                 transition={{ ...spring, delay: open ? (layer * n + i) * 0.028 : 0.01 * i }}
                 style={{ transformOrigin: `${C}px ${CY}px`, transformBox: 'view-box' }}
               />
@@ -377,7 +467,17 @@ function Spiral({ flower, open, petal, deep, centre, ink, spring }: SubProps) {
           </g>
         );
       })}
-      <circle cx={C} cy={CY} r={4.5} fill={centre} stroke={ink} strokeWidth={2.2} />
+      <motion.circle
+        cx={C}
+        cy={CY}
+        r={4.5}
+        fill={centre}
+        stroke={ink}
+        strokeWidth={2.2}
+        initial={false}
+        animate={open ? { opacity: 1 } : { opacity: 0 }}
+        transition={{ duration: 0.2 }}
+      />
     </g>
   );
 }

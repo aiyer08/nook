@@ -78,7 +78,7 @@ export const GARDEN: Flower[] = [
     shape: 'oval',
     spread: 90,
     palette: { petal: '#FFF6E4', deep: '#F0E2C6', centre: '#EFCE7B', stem: '#8FA97C', leaf: '#A8C09A' },
-    contents: ['w:todo', 'c:inbox', 'c:someday', 'w:habits', 'j:braindump', 'w:notes'],
+    contents: ['w:todo', 'c:inbox', 'c:someday', 'w:habits', 'j:braindump', 'w:notes', 'c:blank'],
   },
   {
     id: 'sunflower',
@@ -108,7 +108,7 @@ export const GARDEN: Flower[] = [
     spread: 78,
     palette: { petal: '#FBE3E8', deep: '#EFB9C6', centre: '#F7E9C9', stem: '#9BBE9C', leaf: '#B4D2AE' },
     contents: [
-      'c:symptoms', 'c:workouts', 'c:selfcare', 'c:coping', 'j:therapy',
+      'c:symptoms', 'c:workouts', 'c:selfcare', 'c:coping', 'j:therapy', 'c:therapy',
       't:cycle', 't:routine', 'w:thermometer',
     ],
   },
@@ -154,7 +154,7 @@ export const GARDEN: Flower[] = [
     palette: { petal: '#D9A9BC', deep: '#B98499', centre: '#8E5F72', stem: '#5F7A55', leaf: '#7A9A6B' },
     contents: [
       't:gratitude', 'c:wins', 't:lineaday', 'j:review', 'c:lessons',
-      'j:letter', 't:highlight', 'w:quote',
+      'j:letter', 't:highlight', 'w:quote', 'w:journal', 'j:word', 'c:lettinggo',
     ],
   },
   {
@@ -170,7 +170,7 @@ export const GARDEN: Flower[] = [
     palette: { petal: '#F0A0BE', deep: '#DC7FA3', centre: '#F7DCE4', stem: '#7E9A6B', leaf: '#93B37E' },
     contents: [
       'c:applications', 'w:materials', 'c:recletters', 'c:outcomes',
-      'j:pyramid', 'c:vision', 'w:wheel', 'c:bucket',
+      'j:pyramid', 'c:vision', 'w:wheel', 'c:bucket', 'w:goals', 'c:portfolio',
     ],
   },
   {
@@ -187,6 +187,7 @@ export const GARDEN: Flower[] = [
     contents: [
       'w:papers', 'c:assignments', 'c:classes', 'c:grades', 'c:syllabus',
       'c:reading', 'c:flashcards', 'c:labnotes', 'c:interviewqa', 'c:skills',
+      't:study', 'c:conferences',
     ],
   },
   {
@@ -203,7 +204,7 @@ export const GARDEN: Flower[] = [
     wonky: 7,
     contents: [
       'c:currently', 'c:playlist', 'c:books', 'c:watchlist', 'c:swatches',
-      'c:stickerbook', 'c:handwriting', 'c:concerts', 'w:image',
+      'c:stickerbook', 'c:handwriting', 'c:concerts', 'w:image', 'w:link', 'w:embed',
     ],
   },
   {
@@ -224,7 +225,35 @@ export const GARDEN: Flower[] = [
   },
 ];
 
-/** Entries that belong to no flower, so nothing becomes unreachable. */
+/**
+ * The handful you reach for constantly, shown in a tray above the garden as
+ * well as inside their own flower.
+ *
+ * Deliberately capped at eight. The whole point of the garden is that it
+ * groups a hundred things into eleven; a quick row that grows past a single
+ * glance would just rebuild the flat list it replaced.
+ */
+export const FAVOURITES: string[] = [
+  'w:todo',           // the thing most people open the app to do
+  'w:calendar',
+  'w:notes',
+  'w:goals',
+  't:habit',          // the grid, with both streaks
+  's:week',           // the most-used bullet-journal layout there is
+  'w:journal',
+  'c:applications',   // deadlines are external and unforgiving
+];
+
+/** Which flower a widget lives in, so a favourite can wear its home colour. */
+export function homeFlowerOf(key: string): Flower | undefined {
+  return GARDEN.find((f) => f.contents.includes(key));
+}
+
+/**
+ * Anything with no flower. Should always be empty — there's a test for it —
+ * but it's rendered as a fallback so that adding a preset and forgetting to
+ * file it makes the widget *visible* rather than unreachable.
+ */
 export function looseEntries(): Entry[] {
   const claimed = new Set(GARDEN.flatMap((f) => f.contents));
   return CATALOGUE.filter((e) => !claimed.has(e.key));

@@ -7,6 +7,8 @@ import { toEmbed, unfurl, safeUrl, normalizeUrl } from '../src/lib/media.ts';
 import { fieldsFromGoogle, toGoogleBody, readWhen } from '../src/lib/gcal-map.ts';
 import { streaks, gridDays, yearDays, correlation, describeCorrelation } from '../src/lib/streaks.ts';
 import { identify, fromDataCiteAttrs } from '../src/lib/papers.ts';
+import { CATALOGUE } from '../src/lib/catalogue.ts';
+import { GARDEN, FAVOURITES, homeFlowerOf } from '../src/lib/garden.ts';
 
 let pass = 0;
 const t = (name, fn) => { fn(); pass++; console.log('  ok  ' + name); };
@@ -408,6 +410,44 @@ t('three authors or fewer are all named', () => {
 });
 t('a record with no title is treated as not found', () => {
   assert.equal(fromDataCiteAttrs({ creators: [] }, '1'), null);
+});
+
+
+/* ---------------------------------------------------------------- */
+/* the garden: nothing may be unreachable                            */
+/* ---------------------------------------------------------------- */
+console.log('\nthe garden');
+t('every widget is filed in a flower — nothing loose', () => {
+  const claimed = new Set(GARDEN.flatMap((f) => f.contents));
+  const loose = CATALOGUE.filter((e) => !claimed.has(e.key)).map((e) => e.key);
+  assert.deepEqual(loose, [], `unfiled: ${loose.join(', ')}`);
+});
+t('no flower points at a widget that does not exist', () => {
+  const keys = new Set(CATALOGUE.map((e) => e.key));
+  const dangling = GARDEN.flatMap((f) => f.contents.filter((k) => !keys.has(k)));
+  assert.deepEqual(dangling, [], `dangling: ${dangling.join(', ')}`);
+});
+t('the always-to-hand tray stays small and real', () => {
+  const keys = new Set(CATALOGUE.map((e) => e.key));
+  assert.ok(FAVOURITES.length <= 8, `favourites should be at most 8, got ${FAVOURITES.length}`);
+  assert.equal(new Set(FAVOURITES).size, FAVOURITES.length, 'no duplicates in the tray');
+  for (const k of FAVOURITES) assert.ok(keys.has(k), `favourite ${k} is not a real widget`);
+});
+t('every favourite also lives inside a flower, so the tray is a shortcut not a home', () => {
+  for (const k of FAVOURITES) {
+    assert.ok(homeFlowerOf(k), `${k} is in the tray but in no flower`);
+  }
+});
+t('the four the user asked for are in the tray', () => {
+  for (const k of ['w:calendar', 'w:goals', 'w:notes', 'w:todo']) {
+    assert.ok(FAVOURITES.includes(k), `${k} missing from the tray`);
+  }
+});
+t('every flower holds something', () => {
+  for (const f of GARDEN) {
+    assert.ok(f.contents.length > 0, `${f.id} is empty`);
+  }
+  assert.equal(GARDEN.length, 11);
 });
 
 console.log(`\n${pass} checks passed\n`);

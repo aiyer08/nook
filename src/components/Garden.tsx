@@ -12,9 +12,9 @@
  */
 import { useEffect, useMemo, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import type { Entry } from '../lib/catalogue';
+import { CATALOGUE, type Entry } from '../lib/catalogue';
 import type { Flower } from '../lib/garden';
-import { GARDEN, entriesOf, flowerMatches, looseEntries } from '../lib/garden';
+import { FAVOURITES, GARDEN, entriesOf, flowerMatches, homeFlowerOf, looseEntries } from '../lib/garden';
 import { Bee, FallingPetal, FlowerSvg } from './Flower';
 import { Icon } from './Icons';
 import { Panel } from './ui';
@@ -102,6 +102,15 @@ export function GardenPicker({ open, onClose }: { open: boolean; onClose: () => 
     [q],
   );
 
+  /** The tray. Hidden while searching, since the garden itself is the answer then. */
+  const favourites = useMemo(() => {
+    if (q.trim()) return [];
+    const byKey = new Map(CATALOGUE.map((e) => [e.key, e]));
+    return FAVOURITES
+      .map((k) => ({ entry: byKey.get(k), flower: homeFlowerOf(k) }))
+      .filter((x): x is { entry: Entry; flower: ReturnType<typeof homeFlowerOf> } => Boolean(x.entry));
+  }, [q]);
+
   const loose = useMemo(() => {
     const extra = looseEntries();
     if (!q.trim()) return extra;
@@ -130,6 +139,57 @@ export function GardenPicker({ open, onClose }: { open: boolean; onClose: () => 
           ? `${matching.size} of ${GARDEN.length} flowers are standing up.`
           : `Eleven flowers. ${season.charAt(0).toUpperCase()}${season.slice(1)} colours.`}
       </p>
+
+      {/* the ones you reach for constantly, kept in a tray by the door */}
+      {favourites.length > 0 && (
+        <div
+          style={{
+            marginBottom: 16, padding: '9px 10px 10px', borderRadius: 'var(--r-lg)',
+            border: '3px solid #C8A97E',
+            // a shallow wooden seed tray
+            background:
+              'repeating-linear-gradient(90deg, color-mix(in srgb, #D9B489 60%, var(--surface)) 0 22px, color-mix(in srgb, #C8A97E 42%, var(--surface)) 22px 24px)',
+          }}
+        >
+          <p
+            className="hand"
+            style={{ margin: '0 0 7px', fontSize: 16, color: 'var(--ink-soft)' }}
+          >
+            Always to hand
+          </p>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
+            {favourites.map(({ entry, flower }) => (
+              <button
+                key={entry.key}
+                onClick={() => add(entry)}
+                title={`${entry.blurb} · lives in ${flower?.name ?? 'the garden'}`}
+                style={{
+                  display: 'inline-flex', alignItems: 'center', gap: 6,
+                  padding: '5px 11px 5px 6px', borderRadius: 999,
+                  // wears its flower's colour, so you learn where it lives
+                  border: `2.5px solid ${flower?.palette.deep ?? 'var(--line)'}`,
+                  background: 'var(--surface)',
+                  boxShadow: 'var(--shadow-sm)',
+                  fontSize: 12, fontWeight: 700,
+                }}
+              >
+                <span
+                  style={{
+                    width: 20, height: 20, borderRadius: 999, display: 'grid',
+                    placeItems: 'center', flexShrink: 0,
+                    background: flower?.palette.petal ?? 'var(--accent)',
+                    border: `1.8px solid ${flower?.palette.deep ?? 'var(--line)'}`,
+                    color: readableOn(flower?.palette.petal ?? '#E8A598'),
+                  }}
+                >
+                  <Icon name={entry.icon} size={12} />
+                </span>
+                {entry.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
       <div
         style={{
@@ -234,7 +294,11 @@ export function GardenPicker({ open, onClose }: { open: boolean; onClose: () => 
         })}
       </div>
 
-      {/* anything not in a flower stays reachable */}
+      {/*
+        Everything is filed in a flower, and a test enforces that. This only
+        appears if a preset is ever added without being filed — better that it
+        shows up here than becomes unreachable.
+      */}
       {loose.length > 0 && (
         <div style={{ marginTop: 20 }}>
           <p
@@ -243,7 +307,7 @@ export function GardenPicker({ open, onClose }: { open: boolean; onClose: () => 
               textTransform: 'uppercase', color: 'var(--ink-faint)',
             }}
           >
-            Loose in the shed
+            Not yet filed
           </p>
           <div style={{ display: 'grid', gap: 6 }}>
             {loose.map((e) => (
