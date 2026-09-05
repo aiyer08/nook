@@ -3,7 +3,7 @@ import {
   addDays, daysBetween, finishedOn, isTaskDoneOn, monthGrid, recurrenceHitsOn,
   relativeDay, rolloverDays, taskAppearsOn, toDateStr,
 } from '../src/lib/dates.ts';
-import { toEmbed, unfurl, safeUrl, normalizeUrl } from '../src/lib/media.ts';
+import { toEmbed, unfurl, safeUrl, normalizeUrl, formatBytes } from '../src/lib/media.ts';
 import { fieldsFromGoogle, toGoogleBody, readWhen } from '../src/lib/gcal-map.ts';
 import { streaks, gridDays, yearDays, correlation, describeCorrelation } from '../src/lib/streaks.ts';
 import { identify, fromDataCiteAttrs } from '../src/lib/papers.ts';
@@ -15,6 +15,7 @@ import {
 import { skyFromCode } from '../src/lib/weather.ts';
 import { compareGoalDue, compareRows, compareTaskDue, dueFieldOf, taskWhen } from '../src/lib/due.ts';
 import { moveWidgetTo, travellingWith } from '../src/lib/move.ts';
+import { EMBED_LIMIT, fileIdsIn, kindOfMime, orphans, shouldEmbed } from '../src/lib/files.ts';
 import { compareBy, COLLECTION_PRESETS, presetById } from '../src/lib/collections.ts';
 import { completionDates, describeWeek, weekStart, wrapUp } from '../src/lib/wrapped.ts';
 
@@ -814,6 +815,59 @@ t('a hand-picked widget colour survives the move', () => {
   d.widgets[0].accent = '#EFCE7B';
   moveWidgetTo(d, 'w1', 'health', { x: 0, y: 0 });
   assert.equal(d.widgets[0].accent, '#EFCE7B');
+});
+
+console.log('\nthe file store');
+
+t('every place a file can be referenced is found', () => {
+  const d = {
+    widgets: [
+      { id: 'w1', data: { fileId: 'f1' } },
+      { id: 'w2', data: { src: 'data:image/png;base64,zzz' } },   // not moved yet
+      { id: 'w3', data: {} },
+      { id: 'w4', data: { fileId: 'f1' } },                        // shared, counted once
+    ],
+    materials: [
+      { id: 'm1', fileId: 'f2' },
+      { id: 'm2', url: 'https://example.com/a.pdf' },
+    ],
+  };
+  assert.deepEqual(fileIdsIn(d).sort(), ['f1', 'f2']);
+});
+
+t('a document with nothing in it references no files', () => {
+  assert.deepEqual(fileIdsIn({}), []);
+  assert.deepEqual(fileIdsIn({ widgets: [], materials: [] }), []);
+});
+
+t('orphans are what the store has and the document does not', () => {
+  assert.deepEqual(orphans(['a', 'b', 'c'], ['b']), ['a', 'c']);
+  assert.deepEqual(orphans(['a'], ['a']), []);
+  assert.deepEqual(orphans([], ['a']), []);
+});
+
+t('file kinds are read from the type, falling back to the name', () => {
+  assert.equal(kindOfMime('application/pdf'), 'pdf');
+  assert.equal(kindOfMime('', 'Resume-2026.PDF'), 'pdf');
+  assert.equal(kindOfMime('image/jpeg'), 'image');
+  assert.equal(kindOfMime('application/vnd.openxmlformats-officedocument.wordprocessingml.document'), 'doc');
+  assert.equal(kindOfMime('', 'statement.docx'), 'doc');
+  assert.equal(kindOfMime('application/zip', 'stuff.zip'), 'other');
+});
+
+t('sizes read in the unit a person would use', () => {
+  assert.equal(formatBytes(394), '394 B');
+  assert.equal(formatBytes(2048), '2 KB');
+  assert.equal(formatBytes(5 * 1024 * 1024), '5.0 MB');
+  // a 10 GB quota shouldn't print as "10240.0 MB"
+  assert.equal(formatBytes(10 * 1024 ** 3), '10.0 GB');
+});
+
+t('a backup only inlines files it can sensibly carry', () => {
+  assert.equal(shouldEmbed(0), false, 'nothing to embed');
+  assert.equal(shouldEmbed(1024), true);
+  assert.equal(shouldEmbed(EMBED_LIMIT), true);
+  assert.equal(shouldEmbed(EMBED_LIMIT + 1), false);
 });
 
 console.log(`\n${pass} checks passed\n`);

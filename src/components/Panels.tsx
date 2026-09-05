@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Panel, Toggle, Field, Row, Empty } from './ui';
 import { Icon, SECTOR_ICONS, type IconName } from './Icons';
 import { useDoc, useUI, storageUsed, sortedSectors } from '../lib/store';
@@ -9,6 +9,10 @@ import { Avatar, AvatarRoom, AVATAR_COLORS, SPECIES_LIST } from './Avatar';
 import { COSMETICS, cosmeticsFor, isUnlocked, type Cosmetic } from '../lib/cosmetics';
 import { seasonOf } from '../lib/dates';
 import { SKY_LABEL, findPlace, locate } from '../lib/weather';
+import {
+  estimate, listFiles, packFiles, shouldEmbed, sweep, totalBytes, unpackFiles,
+  type FileBundle, type StoredFile,
+} from '../lib/files';
 
 /* ------------------------------------------------------------------ */
 /* widget picker                                                       */
@@ -319,22 +323,47 @@ export function SettingsPanel({ open, onClose }: { open: boolean; onClose: () =>
 
   const used = storageUsed();
 
-  const exportJson = () => {
-    const blob = new Blob([JSON.stringify(doc, null, 2)], { type: 'application/json' });
+  /**
+   * A backup carries the documents and pictures too — but only up to a point.
+   * They're base64 inside one JSON file, so a gigabyte of photos would build a
+   * download nothing can open. Past the limit we save the board alone and say
+   * so, rather than quietly producing something broken.
+   */
+  const exportJson = async () => {
+    const total = await totalBytes();
+    const embed = shouldEmbed(total);
+    const files = embed ? await packFiles() : [];
+    const payload = { ...doc, files };
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
     a.download = `nook-backup-${new Date().toISOString().slice(0, 10)}.json`;
     a.click();
     URL.revokeObjectURL(a.href);
-    toast('Saved a copy to your downloads.');
+    toast(
+      total === 0
+        ? 'Saved a copy to your downloads.'
+        : embed
+          ? `Saved a copy, with ${files.length} file${files.length === 1 ? '' : 's'} inside it.`
+          : `Saved the board. Your ${formatBytes(total)} of files were left out — too big for one JSON.`,
+      embed || total === 0 ? 'info' : 'warn',
+    );
   };
 
   const importJson = async (file: File) => {
     try {
-      const parsed = JSON.parse(await file.text()) as Doc;
+      const parsed = JSON.parse(await file.text()) as Doc & { files?: FileBundle[] };
       if (!parsed || !Array.isArray(parsed.sectors)) throw new Error('bad file');
-      importDoc(parsed);
-      toast('Brought your nook back. ⌘Z undoes this.');
+      // files first, so nothing points at a document that isn't there yet
+      const restored = Array.isArray(parsed.files) ? await unpackFiles(parsed.files) : 0;
+      const { files: _files, ...docOnly } = parsed;
+      void _files;
+      importDoc(docOnly as Doc);
+      toast(
+        restored > 0
+          ? `Brought your nook back, with ${restored} file${restored === 1 ? '' : 's'}. ⌘Z undoes this.`
+          : 'Brought your nook back. ⌘Z undoes this.',
+      );
     } catch {
       toast('That file didn’t look like a Nook backup.', 'warn');
     }
@@ -437,9 +466,13 @@ export function SettingsPanel({ open, onClose }: { open: boolean; onClose: () =>
         </Row>
       </Field>
 
-      <Field label="Your data" hint={`Everything lives in this browser — about ${formatBytes(used)} so far.`}>
+      <Field
+        label="Your data"
+        hint="Everything lives in this browser. Nothing is sent anywhere."
+      >
+        <StorageReport docBytes={used} />
         <Row>
-          <button className="btn" onClick={exportJson}><Icon name="download" size={15} /> Export a backup</button>
+          <button className="btn" onClick={() => void exportJson()}><Icon name="download" size={15} /> Export a backup</button>
           <button className="btn" onClick={() => fileRef.current?.click()}><Icon name="upload" size={15} /> Import</button>
           <input
             ref={fileRef}
@@ -449,19 +482,6 @@ export function SettingsPanel({ open, onClose }: { open: boolean; onClose: () =>
             onChange={(e) => { const f = e.target.files?.[0]; if (f) void importJson(f); e.target.value = ''; }}
           />
         </Row>
-        <div
-          style={{
-            height: 10, borderRadius: 999, border: '2px solid var(--line)', marginTop: 10,
-            background: 'var(--surface)', overflow: 'hidden',
-          }}
-          role="progressbar"
-          aria-label="Storage used"
-          aria-valuenow={Math.min(100, Math.round((used / 5_000_000) * 100))}
-          aria-valuemin={0}
-          aria-valuemax={100}
-        >
-          <div style={{ width: `${Math.min(100, (used / 5_000_000) * 100)}%`, height: '100%', background: 'var(--accent)' }} />
-        </div>
       </Field>
 
       <Field label="Start over">
@@ -638,3 +658,106 @@ const AMBIENTS: { id: Ambient; label: string; icon: IconName }[] = [
   { id: 'cafe', label: 'Café', icon: 'cup' },
   { id: 'fire', label: 'Fireplace', icon: 'flame' },
 ];
+
+/**
+ * What's actually stored, and where.
+ *
+ * Worth splitting in two, because the two halves have wildly different
+ * ceilings: the board is JSON in localStorage, which every browser caps at
+ * about 5 MB and won't negotiate, while files live in IndexedDB, which is
+ * given a share of free disk — usually gigabytes. Showing one number against
+ * one bar was what made the app feel like it only held a megabyte.
+ */
+function StorageReport({ docBytes }: { docBytes: number }) {
+  const doc = useDoc((s) => s.doc);
+  const toast = useUI((s) => s.toast);
+  const [files, setFiles] = useState<StoredFile[]>([]);
+  const [disk, setDisk] = useState<{ usage: number; quota: number } | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  const refresh = () => {
+    void listFiles().then(setFiles);
+    void estimate().then(setDisk);
+  };
+  useEffect(refresh, []);
+
+  const fileBytes = files.reduce((n, f) => n + f.size, 0);
+  // the browser's own hard limit on localStorage, near enough
+  const docLimit = 5_000_000;
+  const docPct = Math.min(100, (docBytes / docLimit) * 100);
+  const diskPct = disk && disk.quota > 0 ? Math.min(100, (disk.usage / disk.quota) * 100) : 0;
+
+  const tidy = async () => {
+    setBusy(true);
+    try {
+      const { removed, bytes } = await sweep(doc);
+      refresh();
+      toast(
+        removed === 0
+          ? 'Nothing to tidy — every file is still in use.'
+          : `Cleared ${removed} unused file${removed === 1 ? '' : 's'}, ${formatBytes(bytes)} back.`,
+      );
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div style={{ display: 'grid', gap: 10, marginBottom: 10 }}>
+      <Meter
+        label="The board"
+        detail={`${formatBytes(docBytes)} of about ${formatBytes(docLimit)}`}
+        pct={docPct}
+        note="Text, dates, tasks and layout. This is the one with a small, fixed ceiling."
+      />
+      <Meter
+        label="Files"
+        detail={
+          disk
+            ? `${files.length} file${files.length === 1 ? '' : 's'} · ${formatBytes(fileBytes)} of ${formatBytes(disk.quota)} available`
+            : `${files.length} file${files.length === 1 ? '' : 's'} · ${formatBytes(fileBytes)}`
+        }
+        pct={diskPct}
+        note="PDFs and pictures, kept outside the board so they can be as big as they need to be."
+      />
+      <Row>
+        <button className="btn tiny" onClick={() => void tidy()} disabled={busy}>
+          <Icon name="eraser" size={13} /> Tidy up unused files
+        </button>
+        <button className="btn tiny ghost" onClick={refresh}>Refresh</button>
+      </Row>
+    </div>
+  );
+}
+
+function Meter({
+  label, detail, pct, note,
+}: { label: string; detail: string; pct: number; note: string }) {
+  return (
+    <div>
+      <div style={{ display: 'flex', gap: 8, alignItems: 'baseline', fontSize: 12 }}>
+        <span style={{ fontWeight: 700 }}>{label}</span>
+        <span style={{ color: 'var(--ink-soft)' }}>{detail}</span>
+      </div>
+      <div
+        style={{
+          height: 10, borderRadius: 999, border: '2px solid var(--line)', margin: '4px 0 3px',
+          background: 'var(--surface)', overflow: 'hidden',
+        }}
+        role="progressbar"
+        aria-label={`${label} storage used`}
+        aria-valuenow={Math.round(pct)}
+        aria-valuemin={0}
+        aria-valuemax={100}
+      >
+        <div
+          style={{
+            width: `${Math.max(pct, pct > 0 ? 2 : 0)}%`, height: '100%',
+            background: pct > 85 ? '#D98A84' : 'var(--accent)',
+          }}
+        />
+      </div>
+      <p style={{ margin: 0, fontSize: 11, color: 'var(--ink-faint)', lineHeight: 1.4 }}>{note}</p>
+    </div>
+  );
+}

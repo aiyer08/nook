@@ -1,12 +1,13 @@
 import { useEffect, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { useDoc, useUI } from '../../lib/store';
+import { deleteFile, putFile, urlFor } from '../../lib/files';
 import type { LinkCard, Sector, Widget } from '../../lib/types';
 import { Icon } from '../Icons';
 import { Empty } from '../ui';
 import {
-  approxBytes, formatBytes, imageFromDataTransfer, isUrlLike, normalizeUrl,
-  safeUrl, shrinkImage, toEmbed, unfurl,
+  imageFromDataTransfer, isUrlLike, normalizeUrl,
+  safeUrl, shrinkToBlob, toEmbed, unfurl,
 } from '../../lib/media';
 
 /* ------------------------------------------------------------------ */
@@ -70,6 +71,24 @@ export function QuoteWidget({ widget }: { widget: Widget; sector: Sector }) {
 /* image                                                               */
 /* ------------------------------------------------------------------ */
 
+/**
+ * Resolve a picture to something an <img> can point at.
+ *
+ * A stored file has no URL until one is minted, so this is async and returns
+ * '' for the first render. `src` is still honoured for boards made before
+ * there was a file store, and for images hot-linked from the web.
+ */
+function useFileUrl(fileId: string | undefined, src: string | undefined): string {
+  const [url, setUrl] = useState('');
+  useEffect(() => {
+    if (!fileId) { setUrl(''); return; }
+    let alive = true;
+    void urlFor(fileId).then((u) => { if (alive) setUrl(u ?? ''); });
+    return () => { alive = false; };
+  }, [fileId]);
+  return fileId ? url : (src ?? '');
+}
+
 export function ImageWidget({ widget }: { widget: Widget; sector: Sector }) {
   const patch = useDoc((s) => s.patchWidgetData);
   const toast = useUI((s) => s.toast);
@@ -80,16 +99,23 @@ export function ImageWidget({ widget }: { widget: Widget; sector: Sector }) {
   const fileRef = useRef<HTMLInputElement>(null);
   const boxRef = useRef<HTMLDivElement>(null);
 
-  const src = widget.data.src ?? '';
+  const src = useFileUrl(widget.data.fileId, widget.data.src);
   const fit = widget.data.fit ?? 'cover';
+
+  /** Swap in a new picture, and don't leave the old bytes lying about. */
+  const store = async (blob: Blob, name: string) => {
+    const previous = widget.data.fileId;
+    const stored = await putFile(blob, name);
+    patch(widget.id, {
+      fileId: stored.id, fileName: stored.name, mime: stored.mime, size: stored.size, src: '',
+    });
+    if (previous) void deleteFile(previous);
+  };
 
   const take = async (file: File) => {
     setBusy(true);
     try {
-      const data = await shrinkImage(file);
-      patch(widget.id, { src: data });
-      const size = approxBytes(data);
-      if (size > 900_000) toast(`That's a big one (${formatBytes(size)}) — it may fill up storage.`, 'warn');
+      await store(await shrinkToBlob(file), file.name);
     } catch {
       toast('Couldn’t read that image, sorry.', 'warn');
     } finally {
@@ -102,17 +128,21 @@ export function ImageWidget({ widget }: { widget: Widget; sector: Sector }) {
     if (!safeUrl(url)) { toast('That doesn’t look like a link.', 'warn'); return; }
     setBusy(true);
     try {
-      // Try to bake it in so it survives offline; if the host blocks that,
-      // fall back to hot-linking the original.
-      const data = await shrinkImage(url);
-      patch(widget.id, { src: data });
+      // Keep a copy so it survives the other site deleting it; if the host
+      // won't allow that, fall back to hot-linking.
+      await store(await shrinkToBlob(url), 'from the web');
     } catch {
-      patch(widget.id, { src: url });
+      patch(widget.id, { src: url, fileId: undefined });
     } finally {
       setBusy(false);
       setUrlDraft('');
       setShowUrl(false);
     }
+  };
+
+  const clear = () => {
+    if (widget.data.fileId) void deleteFile(widget.data.fileId);
+    patch(widget.id, { src: '', fileId: undefined, fileName: undefined, mime: undefined, size: undefined });
   };
 
   // Paste a screenshot straight in while this widget is focused.
@@ -183,7 +213,7 @@ export function ImageWidget({ widget }: { widget: Widget; sector: Sector }) {
               {fit === 'cover' ? 'Fill' : 'Fit'}
             </button>
             <button className="btn tiny" onClick={() => fileRef.current?.click()}>Replace</button>
-            <button className="btn ghost tiny" onClick={() => patch(widget.id, { src: '' })}>Clear</button>
+            <button className="btn ghost tiny" onClick={clear}>Clear</button>
           </div>
         </>
       ) : (

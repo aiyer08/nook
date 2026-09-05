@@ -251,8 +251,14 @@ function saveDoc(doc: Doc) {
     } catch {
       if (!lastSaveFailed) {
         lastSaveFailed = true;
+        /*
+          Pictures and PDFs don't live in here any more, so if this fires it's
+          the board's own text that's outgrown localStorage's ~5 MB — the
+          Settings panel shows exactly how full it is.
+        */
         useUI.getState().toast(
-          "Your board is too full to save — try smaller images.",
+          'This browser won’t save any more of the board. Settings shows how full it is —'
+          + ' exporting a backup and trimming old pages will help.',
           'warn',
         );
       }
@@ -406,6 +412,8 @@ interface DocState {
   removeWidget: (id: ID) => void;
   /** send a widget, and everything filed in it, to another tab */
   moveWidgetToSector: (id: ID, sectorId: ID) => boolean;
+  /** point image widgets at the file store after their bytes have been moved */
+  adoptFiles: (swaps: { widgetId: ID; fileId: string; fileName: string; mime: string; size: number }[]) => void;
   duplicateWidget: (id: ID) => void;
   raiseWidget: (id: ID) => void;
 
@@ -692,6 +700,23 @@ export const useDoc = create<DocState>((set, get) => ({
     });
     return moved;
   },
+
+  adoptFiles: (swaps) =>
+    // quiet: this is bookkeeping, not something you'd want to undo
+    get().quiet((d) => {
+      for (const swap of swaps) {
+        const w = d.widgets.find((x) => x.id === swap.widgetId);
+        if (!w) continue;
+        w.data = {
+          ...w.data,
+          src: '',
+          fileId: swap.fileId,
+          fileName: swap.fileName,
+          mime: swap.mime,
+          size: swap.size,
+        };
+      }
+    }),
 
   removeWidget: (id) =>
     get().commit('delete widget', (d) => {

@@ -7,6 +7,65 @@ import { uid } from './id';
  * Everything lives in localStorage, so full-resolution photos are a quota
  * accident waiting to happen. Downscale to a sane box and re-encode.
  */
+/**
+ * Scale a picture down and hand back a Blob.
+ *
+ * Blobs rather than data URLs: a data URL is base64, which is a third bigger
+ * than the bytes it carries and has to live in the document JSON. A Blob goes
+ * to the browser's file store (lib/files.ts) and the document keeps an id.
+ * That's also why the size cap is generous now — the old 1400px was rationing
+ * a 5 MB localStorage budget that pictures no longer come out of.
+ */
+export function shrinkToBlob(
+  source: Blob | string,
+  maxSide = 2200,
+  quality = 0.86,
+): Promise<Blob> {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    const cleanup = () => {
+      if (typeof source !== 'string') URL.revokeObjectURL(img.src);
+    };
+    img.onload = () => {
+      const scale = Math.min(1, maxSide / Math.max(img.width, img.height));
+      const w = Math.max(1, Math.round(img.width * scale));
+      const h = Math.max(1, Math.round(img.height * scale));
+      const canvas = document.createElement('canvas');
+      canvas.width = w;
+      canvas.height = h;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) { cleanup(); reject(new Error('no canvas')); return; }
+      ctx.drawImage(img, 0, 0, w, h);
+      // keep PNG for anything with transparency, JPEG for photographs
+      const type = typeof source !== 'string' && source.type === 'image/png' ? 'image/png' : 'image/jpeg';
+      canvas.toBlob(
+        (blob) => {
+          cleanup();
+          if (blob) resolve(blob);
+          else reject(new Error('could not encode that image'));
+        },
+        type,
+        type === 'image/jpeg' ? quality : undefined,
+      );
+    };
+    img.onerror = () => { cleanup(); reject(new Error('could not load that image')); };
+    img.src = typeof source === 'string' ? source : URL.createObjectURL(source);
+  });
+}
+
+/** Any file from a drop or paste, not just pictures. */
+export function fileFromDataTransfer(dt: DataTransfer | null): File | null {
+  if (!dt) return null;
+  for (const item of Array.from(dt.items ?? [])) {
+    if (item.kind === 'file') {
+      const f = item.getAsFile();
+      if (f) return f;
+    }
+  }
+  return Array.from(dt.files ?? [])[0] ?? null;
+}
+
 export function shrinkImage(
   source: Blob | string,
   maxSide = 1400,
@@ -283,5 +342,7 @@ export function approxBytes(s: string) {
 export function formatBytes(n: number) {
   if (n < 1024) return `${n} B`;
   if (n < 1024 * 1024) return `${(n / 1024).toFixed(0)} KB`;
-  return `${(n / 1024 / 1024).toFixed(1)} MB`;
+  if (n < 1024 * 1024 * 1024) return `${(n / 1024 / 1024).toFixed(1)} MB`;
+  // file quotas run to gigabytes now, and "10240.0 MB" reads like a bug
+  return `${(n / 1024 / 1024 / 1024).toFixed(1)} GB`;
 }

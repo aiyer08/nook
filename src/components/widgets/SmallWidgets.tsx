@@ -9,6 +9,9 @@ import { addDays, daysBetween, prettyDate, today } from '../../lib/dates';
 import { play } from '../../lib/sound';
 import { readableOn } from '../../lib/themes';
 import { uid } from '../../lib/id';
+import { deleteFile, kindOfMime, putFile, urlFor } from '../../lib/files';
+import { formatBytes } from '../../lib/media';
+import { useRef } from 'react';
 
 /* ================================================================== */
 /* journal — the same few questions, every day                         */
@@ -478,6 +481,23 @@ const KIND_COLOR: Record<Material['kind'], string> = {
   letter: '#EFA3B0', portfolio: '#95CBC8', other: '#D9C7B8',
 };
 
+/** A resume called "resume-2026.pdf" should file itself as a resume. */
+function guessKind(name: string): Material['kind'] {
+  const n = name.toLowerCase();
+  if (/resume|cv\b/.test(n)) return 'resume';
+  if (/statement|sop\b|purpose/.test(n)) return 'statement';
+  if (/essay|writing|sample/.test(n)) return 'essay';
+  if (/transcript|grades|marks/.test(n)) return 'transcript';
+  if (/letter|rec\b|reference/.test(n)) return 'letter';
+  if (/portfolio|work/.test(n)) return 'portfolio';
+  return 'other';
+}
+
+/** "resume-2026.pdf" → "resume 2026" for the row's title. */
+function tidyName(name: string): string {
+  return name.replace(/\.[a-z0-9]{1,5}$/i, '').replace(/[_-]+/g, ' ').trim() || name;
+}
+
 export function MaterialsWidget({ widget, sector }: { widget: Widget; sector: Sector }) {
   const materials = useDoc((s) => s.doc.materials);
   const items = useDoc((s) => s.doc.items);
@@ -486,10 +506,56 @@ export function MaterialsWidget({ widget, sector }: { widget: Widget; sector: Se
   const remove = useDoc((s) => s.removeMaterial);
   const accent = widget.accent ?? sector.accent;
 
+  const toast = useUI((s) => s.toast);
   const [draft, setDraft] = useState('');
   const [open, setOpen] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const fileRef = useRef<HTMLInputElement>(null);
+  /** the material an incoming file should replace, or null for a new one */
+  const replacing = useRef<string | null>(null);
 
   const usedBy = (id: string) => items.filter((i) => i.materials.includes(id)).length;
+
+  /**
+   * Take in real documents. The bytes go to the browser's file store, and only
+   * the id lands in the board — a 4 MB PDF in the document JSON would eat the
+   * whole 5 MB localStorage budget on its own.
+   */
+  const importFiles = async (files: FileList | null) => {
+    const chosen = Array.from(files ?? []);
+    const target = replacing.current;
+    replacing.current = null;
+    if (!chosen.length) return;
+    setBusy(true);
+    try {
+      for (const file of chosen) {
+        const stored = await putFile(file, file.name);
+        const patch = {
+          fileId: stored.id, fileName: stored.name, mime: stored.mime, size: stored.size,
+          updatedOn: today(),
+        };
+        if (target) {
+          const old = materials.find((m) => m.id === target);
+          update(target, patch);
+          // the replaced version's bytes are no use to anyone
+          if (old?.fileId) void deleteFile(old.fileId);
+          break;   // replacing takes one file, not a pile
+        }
+        const id = add({
+          name: tidyName(file.name),
+          kind: guessKind(file.name),
+          version: 'v1',
+          ...patch,
+        });
+        setOpen(id);
+      }
+      toast(chosen.length > 1 ? `${chosen.length} documents filed.` : `“${chosen[0].name}” filed.`);
+    } catch {
+      toast('That file wouldn’t save. It may be too big for this browser.', 'warn');
+    } finally {
+      setBusy(false);
+    }
+  };
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 8, flex: 1, minHeight: 0 }}>
@@ -509,6 +575,16 @@ export function MaterialsWidget({ widget, sector }: { widget: Widget; sector: Se
           style={{ flex: 1, padding: '8px 12px', fontSize: 13 }}
         />
         <button
+          className="btn icon"
+          onClick={() => { replacing.current = null; fileRef.current?.click(); }}
+          aria-label="Import a document"
+          title="Import a PDF, image or document"
+          disabled={busy}
+          style={{ padding: 8 }}
+        >
+          <Icon name={busy ? 'clock' : 'upload'} size={16} />
+        </button>
+        <button
           className="btn icon primary"
           onClick={() => {
             if (!draft.trim()) return;
@@ -521,13 +597,21 @@ export function MaterialsWidget({ widget, sector }: { widget: Widget; sector: Se
         >
           <Icon name="plus" size={16} />
         </button>
+        <input
+          ref={fileRef}
+          type="file"
+          multiple
+          accept=".pdf,application/pdf,image/*,.doc,.docx,.odt,.rtf,.txt,.md,.pages"
+          onChange={(e) => { void importFiles(e.target.files); e.target.value = ''; }}
+          hidden
+        />
       </div>
 
       <div className="scroll" style={{ flex: 1, minHeight: 0, marginRight: -6, paddingRight: 6 }}>
         {materials.length === 0 && (
           <Empty icon="copy">
-            Keep each document once, with its version. Then attach it to as many applications as
-            you like.
+            Import your PDFs and keep each document once, with its version. Then attach it to as
+            many applications as you like.
           </Empty>
         )}
         <AnimatePresence initial={false}>
@@ -572,11 +656,13 @@ export function MaterialsWidget({ widget, sector }: { widget: Widget; sector: Se
                     </span>
                     <span style={{ display: 'block', fontSize: 11, color: 'var(--ink-soft)' }}>
                       {m.kind} · updated {m.updatedOn}
+                      {m.size ? ` · ${kindOfMime(m.mime ?? '', m.fileName).toUpperCase()} ${formatBytes(m.size)}` : ''}
                       {used > 0 && ` · attached to ${used}`}
                     </span>
                   </button>
+                  {m.fileId && <FileButtons material={m} />}
                   {m.url && (
-                    <a className="btn ghost tiny" href={m.url} target="_blank" rel="noopener noreferrer" aria-label="Open" style={{ padding: 4 }}>
+                    <a className="btn ghost tiny" href={m.url} target="_blank" rel="noopener noreferrer" aria-label="Open the link" style={{ padding: 4 }}>
                       <Icon name="link" size={12} />
                     </a>
                   )}
@@ -610,7 +696,35 @@ export function MaterialsWidget({ widget, sector }: { widget: Widget; sector: Se
                       <input value={m.version} onChange={(e) => update(m.id, { version: e.target.value })}
                         placeholder="v1" aria-label="Version" style={{ ...sm, width: 74 }} />
                       <input value={m.url ?? ''} onChange={(e) => update(m.id, { url: e.target.value })}
-                        placeholder="Link to the file (Drive, Dropbox…)" aria-label="Link" style={{ ...sm, flex: 1 }} />
+                        placeholder="Or a link (Drive, Dropbox…)" aria-label="Link" style={{ ...sm, flex: 1 }} />
+                    </div>
+                    <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+                      <button
+                        className="btn tiny"
+                        disabled={busy}
+                        onClick={() => { replacing.current = m.id; fileRef.current?.click(); }}
+                        title={m.fileId ? 'Swap in a newer draft' : 'Attach the actual document'}
+                      >
+                        <Icon name="upload" size={12} />
+                        {m.fileId ? 'Replace the file' : 'Attach a file'}
+                      </button>
+                      {m.fileId && (
+                        <>
+                          <span style={{ fontSize: 11, color: 'var(--ink-faint)', minWidth: 0, wordBreak: 'break-all' }}>
+                            {m.fileName} · {formatBytes(m.size ?? 0)}
+                          </span>
+                          <button
+                            className="btn ghost tiny"
+                            onClick={() => {
+                              void deleteFile(m.fileId!);
+                              update(m.id, { fileId: undefined, fileName: undefined, mime: undefined, size: undefined });
+                            }}
+                            title="Keep the entry, drop the file"
+                          >
+                            <Icon name="close" size={12} /> file
+                          </button>
+                        </>
+                      )}
                     </div>
                     <textarea value={m.notes ?? ''} onChange={(e) => update(m.id, { notes: e.target.value })}
                       placeholder="What makes this version different" rows={2} aria-label="Notes" style={{ fontSize: 12.5 }} />
@@ -619,7 +733,11 @@ export function MaterialsWidget({ widget, sector }: { widget: Widget; sector: Se
                         {used === 0 ? 'not attached to anything yet' : `attached to ${used} application${used === 1 ? '' : 's'}`}
                       </span>
                       <span style={{ flex: 1 }} />
-                      <button className="btn ghost tiny" style={{ color: '#B4544A' }} onClick={() => remove(m.id)}>
+                      <button
+                        className="btn ghost tiny"
+                        style={{ color: '#B4544A' }}
+                        onClick={() => { if (m.fileId) void deleteFile(m.fileId); remove(m.id); }}
+                      >
                         <Icon name="trash" size={12} /> Delete
                       </button>
                     </div>
@@ -632,6 +750,52 @@ export function MaterialsWidget({ widget, sector }: { widget: Widget; sector: Se
       </div>
       <span hidden>{accent}</span>
     </div>
+  );
+}
+
+/**
+ * Open or save an imported document.
+ *
+ * The bytes are in IndexedDB, so there's no URL until we mint one — hence the
+ * click-then-open rather than a plain <a href>. Opening a PDF this way hands
+ * it to the browser's own viewer.
+ */
+function FileButtons({ material }: { material: Material }) {
+  const toast = useUI((s) => s.toast);
+
+  const withUrl = async (fn: (url: string) => void) => {
+    if (!material.fileId) return;
+    const url = await urlFor(material.fileId);
+    if (!url) { toast('That file isn’t in this browser any more.', 'warn'); return; }
+    fn(url);
+  };
+
+  return (
+    <>
+      <button
+        className="btn ghost tiny"
+        onClick={() => void withUrl((url) => window.open(url, '_blank', 'noopener'))}
+        aria-label={`Open ${material.fileName ?? material.name}`}
+        title="Open it"
+        style={{ padding: 4 }}
+      >
+        <Icon name="play" size={12} />
+      </button>
+      <button
+        className="btn ghost tiny"
+        onClick={() => void withUrl((url) => {
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = material.fileName ?? material.name;
+          a.click();
+        })}
+        aria-label={`Save a copy of ${material.fileName ?? material.name}`}
+        title="Save a copy"
+        style={{ padding: 4 }}
+      >
+        <Icon name="download" size={12} />
+      </button>
+    </>
   );
 }
 

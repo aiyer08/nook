@@ -197,6 +197,15 @@ export interface Material {
   /** a version label, since keeping several is the entire point */
   version: string;
   url?: string;
+  /**
+   * The actual document, kept in the browser's file store rather than in this
+   * JSON — see lib/files.ts. Only the id, and enough about it to draw a row,
+   * live here.
+   */
+  fileId?: string;
+  fileName?: string;
+  mime?: string;
+  size?: number;
   notes?: string;
   updatedOn: DateStr;
 }
@@ -305,6 +314,14 @@ export interface WidgetData {
   links?: LinkCard[];
   // image widget
   src?: string;
+  /**
+   * A picture in the browser's file store. `src` is still read for boards made
+   * before there was one, and for images pasted in as a data URL.
+   */
+  fileId?: string;
+  fileName?: string;
+  mime?: string;
+  size?: number;
   caption?: string;
   fit?: 'cover' | 'contain';
   // embed widget

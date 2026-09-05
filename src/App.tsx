@@ -21,12 +21,14 @@ import { COSMETICS } from './lib/cosmetics';
 import { today } from './lib/dates';
 import { play } from './lib/sound';
 import { startAmbient, stopAmbient } from './lib/ambient';
+import { migrateInlineImages } from './lib/files';
 
 export default function App() {
   const doc = useDoc((s) => s.doc);
   const undo = useDoc((s) => s.undo);
   const redo = useDoc((s) => s.redo);
   const setActiveSector = useDoc((s) => s.setActiveSector);
+  const adoptFiles = useDoc((s) => s.adoptFiles);
 
   const panel = useUI((s) => s.panel);
   const setPanel = useUI((s) => s.setPanel);
@@ -82,6 +84,37 @@ export default function App() {
     const t = window.setInterval(apply, 60_000);
     return () => window.clearInterval(t);
   }, [doc.settings.timeTint]);
+
+  /*
+    ---- move any baked-in pictures out of the document, once ----
+
+    Boards made before there was a file store keep their pictures as base64
+    inside the JSON, which is what used to fill localStorage up after a couple
+    of photos. Moving them frees that room without the user doing anything.
+  */
+  const migrated = useRef(false);
+  useEffect(() => {
+    if (migrated.current || !doc.onboarded) return;
+    migrated.current = true;
+    void (async () => {
+      const swaps = await migrateInlineImages(doc);
+      if (!swaps.length) return;
+      adoptFiles(swaps.map((s) => ({
+        widgetId: s.widgetId,
+        fileId: s.file.id,
+        fileName: s.file.name,
+        mime: s.file.mime,
+        size: s.file.size,
+      })));
+      const freed = swaps.reduce((n, s) => n + s.freedChars, 0);
+      toast(
+        `Tidied ${swaps.length} picture${swaps.length === 1 ? '' : 's'} into the file store`
+        + ` — that's ${Math.round(freed / 1024)} KB back.`,
+      );
+    })();
+    // deliberately not reacting to doc changes: this is a one-shot at startup
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [doc.onboarded]);
 
   /* ---- the cozy background loop ---- */
   useEffect(() => {

@@ -6,7 +6,8 @@ import { WidgetFrame } from './WidgetFrame';
 import { WidgetBody } from './widgets';
 import { DoodleLayer } from './DoodleLayer';
 import { Icon } from './Icons';
-import { imageFromDataTransfer, isUrlLike, normalizeUrl, shrinkImage, toEmbed, unfurl } from '../lib/media';
+import { imageFromDataTransfer, isUrlLike, normalizeUrl, shrinkToBlob, toEmbed, unfurl } from '../lib/media';
+import { putFile } from '../lib/files';
 import { Empty } from './ui';
 import { DecorLayer } from './Decorations';
 import { HiddenMouse } from './Burrow';
@@ -59,7 +60,11 @@ export function Board({ sector }: { sector: Sector }) {
         e.preventDefault();
         const id = addWidget(sector.id, 'image');
         try {
-          patchData(id, { src: await shrinkImage(file), caption: '' });
+          // straight to the browser's file store, not into the document
+          const stored = await putFile(await shrinkToBlob(file), file.name || 'pasted picture');
+          patchData(id, {
+            fileId: stored.id, fileName: stored.name, mime: stored.mime, size: stored.size, caption: '',
+          });
           toast('Pasted a picture onto the page.');
         } catch {
           toast('Couldn’t read that image, sorry.', 'warn');
@@ -98,7 +103,10 @@ export function Board({ sector }: { sector: Sector }) {
         e.preventDefault();
         const id = addWidget(sector.id, 'image');
         try {
-          patchData(id, { src: await shrinkImage(file) });
+          const stored = await putFile(await shrinkToBlob(file), file.name || 'dropped picture');
+          patchData(id, {
+            fileId: stored.id, fileName: stored.name, mime: stored.mime, size: stored.size,
+          });
         } catch {
           toast('Couldn’t read that image, sorry.', 'warn');
         }
