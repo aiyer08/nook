@@ -1,0 +1,265 @@
+/* ------------------------------------------------------------------
+   Nook — cozy paper / bullet-journal
+   Five colour tokens per theme, everything else derives from them.
+   ------------------------------------------------------------------ */
+
+:root {
+  --bg: #fffbf5;
+  --surface: #fff6ea;
+  --ink: #4a3b35;
+  --accent: #e8a598;
+  --muted: #d9c7b8;
+
+  /* derived */
+  --ink-soft: color-mix(in srgb, var(--ink) 62%, var(--bg));
+  --ink-faint: color-mix(in srgb, var(--ink) 38%, var(--bg));
+  --line: color-mix(in srgb, var(--ink) 26%, var(--muted));
+  --surface-2: color-mix(in srgb, var(--surface) 82%, var(--ink) 4%);
+  --accent-soft: color-mix(in srgb, var(--accent) 26%, var(--bg));
+  --accent-tint: color-mix(in srgb, var(--accent) 14%, var(--bg));
+
+  /* a shadow on a cream wall is a deeper cream, never grey */
+  --shadow-tint: color-mix(in srgb, var(--ink) 22%, var(--accent));
+  --shadow-sm: 0 2px 0 color-mix(in srgb, var(--shadow-tint) 26%, transparent);
+  --shadow-md: 0 4px 0 color-mix(in srgb, var(--shadow-tint) 22%, transparent),
+    0 10px 22px -12px color-mix(in srgb, var(--shadow-tint) 60%, transparent);
+  --shadow-lg: 0 8px 0 color-mix(in srgb, var(--shadow-tint) 20%, transparent),
+    0 22px 40px -18px color-mix(in srgb, var(--shadow-tint) 70%, transparent);
+
+  --r-sm: 12px;
+  --r: 18px;
+  --r-lg: 24px;
+  --r-xl: 32px;
+  --border: 3px;
+
+  --font: 'Quicksand', ui-rounded, 'SF Pro Rounded', 'Nunito', system-ui, sans-serif;
+  --hand: 'Caveat', 'Bradley Hand', 'Segoe Print', cursive;
+
+  --spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+
+  color-scheme: light;
+}
+
+:root[data-dark='true'] {
+  color-scheme: dark;
+  --ink-soft: color-mix(in srgb, var(--ink) 74%, var(--bg));
+  --ink-faint: color-mix(in srgb, var(--ink) 52%, var(--bg));
+  --line: color-mix(in srgb, var(--muted) 88%, var(--ink));
+  --surface-2: color-mix(in srgb, var(--surface) 86%, #ffffff 4%);
+  --shadow-tint: #16100f;
+}
+
+* { box-sizing: border-box; }
+
+html, body, #root { height: 100%; }
+
+body {
+  margin: 0;
+  font-family: var(--font);
+  font-weight: 500;
+  color: var(--ink);
+  background: var(--bg);
+  -webkit-font-smoothing: antialiased;
+  overscroll-behavior: none;
+}
+
+/* Paper grain: one tiny SVG turbulence tile under everything.
+   Flat colour reads cheap; a little tooth reads intentional. */
+body[data-texture='true']::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  opacity: 0.5;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.82' numOctaves='4' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)' opacity='0.34'/%3E%3C/svg%3E");
+  mix-blend-mode: multiply;
+}
+
+:root[data-dark='true'] body[data-texture='true']::before {
+  mix-blend-mode: screen;
+  opacity: 0.16;
+}
+
+/* Warmer after dark — the app lives alongside you. */
+#tint-layer {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 9998;
+  opacity: 0;
+  transition: opacity 1.2s ease, background-color 1.2s ease;
+  mix-blend-mode: multiply;
+  background: #ffb26b;
+}
+
+:root[data-dark='true'] #tint-layer { mix-blend-mode: soft-light; }
+
+button, input, textarea, select {
+  font: inherit;
+  color: inherit;
+}
+
+button { cursor: pointer; }
+
+input, textarea, select {
+  background: var(--surface);
+  border: var(--border) solid var(--line);
+  border-radius: var(--r-sm);
+  padding: 8px 12px;
+  outline: none;
+  transition: border-color 0.16s ease, box-shadow 0.16s ease;
+  min-width: 0;
+}
+
+input:focus, textarea:focus, select:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 4px var(--accent-soft);
+}
+
+input::placeholder, textarea::placeholder { color: var(--ink-faint); }
+
+textarea { resize: vertical; font-family: var(--font); line-height: 1.55; }
+
+:focus-visible {
+  outline: 3px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+
+h1, h2, h3, h4 { margin: 0; font-weight: 700; letter-spacing: -0.01em; }
+
+/* ---------------- shared chunky pieces ---------------- */
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+  border-radius: var(--r);
+  border: var(--border) solid var(--line);
+  background: var(--surface);
+  color: var(--ink);
+  font-weight: 700;
+  font-size: 14px;
+  box-shadow: var(--shadow-sm);
+  transition: transform 0.14s var(--spring), box-shadow 0.14s ease,
+    background-color 0.14s ease, border-color 0.14s ease;
+  white-space: nowrap;
+}
+
+.btn:hover { transform: translateY(-2px); box-shadow: var(--shadow-md); }
+.btn:active { transform: translateY(1px); box-shadow: none; }
+
+.btn.primary {
+  background: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 62%, var(--ink));
+  color: var(--on-accent, var(--ink));
+}
+
+.btn.ghost { background: transparent; border-color: transparent; box-shadow: none; }
+.btn.ghost:hover { background: var(--accent-tint); border-color: var(--line); }
+
+.btn.tiny { padding: 5px 10px; font-size: 12px; border-width: 2px; border-radius: 12px; }
+.btn.icon { padding: 8px; border-radius: 14px; }
+
+.btn[disabled] { opacity: 0.42; cursor: not-allowed; transform: none; box-shadow: none; }
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 2px solid var(--line);
+  background: var(--surface);
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--ink-soft);
+}
+
+.chip.on {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: var(--ink);
+}
+
+.card {
+  background: var(--surface);
+  border: var(--border) solid var(--line);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-md);
+}
+
+.hand { font-family: var(--hand); font-weight: 600; }
+
+.scroll {
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--muted) transparent;
+}
+.scroll::-webkit-scrollbar { width: 10px; height: 10px; }
+.scroll::-webkit-scrollbar-thumb {
+  background: var(--muted);
+  border-radius: 999px;
+  border: 3px solid var(--surface);
+}
+.scroll::-webkit-scrollbar-track { background: transparent; }
+
+.sr-only {
+  position: absolute;
+  width: 1px; height: 1px;
+  padding: 0; margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* Washi tape: a torn paper strip laid over a corner. */
+.washi {
+  position: absolute;
+  height: 26px;
+  width: 92px;
+  background: var(--tape, color-mix(in srgb, var(--accent) 52%, #fff));
+  opacity: 0.82;
+  border-left: 2px dashed color-mix(in srgb, var(--ink) 12%, transparent);
+  border-right: 2px dashed color-mix(in srgb, var(--ink) 12%, transparent);
+  box-shadow: 0 1px 3px color-mix(in srgb, var(--shadow-tint) 30%, transparent);
+  pointer-events: none;
+  z-index: 3;
+}
+.washi::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: repeating-linear-gradient(
+    90deg,
+    transparent 0 6px,
+    color-mix(in srgb, #fff 26%, transparent) 6px 12px
+  );
+}
+
+.washi.tl { top: -13px; left: 18px; transform: rotate(-7deg); }
+.washi.tr { top: -13px; right: 18px; transform: rotate(6deg); }
+.washi.corner { top: -18px; left: -22px; transform: rotate(-42deg); width: 78px; }
+
+/* Dot-grid, shown while dragging with snap on. */
+.grid-hint {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+  background-image: radial-gradient(
+    circle at 1px 1px,
+    color-mix(in srgb, var(--ink) 22%, transparent) 1.4px,
+    transparent 1.5px
+  );
+  background-size: 20px 20px;
+}
+.grid-hint.show { opacity: 1; }
+
+@media (prefers-reduced-motion: reduce) {
+  * { animation-duration: 0.001ms !important; transition-duration: 0.001ms !important; }
+}
