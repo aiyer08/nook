@@ -35,6 +35,25 @@ self.addEventListener('activate', (event) => {
 const isHashedAsset = (url) => url.pathname.startsWith('/assets/');
 const isFontFile = (url) => url.hostname === 'fonts.gstatic.com';
 
+/**
+ * The page tells us what it's made of.
+ *
+ * The bundle filenames carry a content hash, so this file can't know them —
+ * and by the time the worker activates, the browser has already fetched them
+ * straight from the network, so they'd only land in the cache on the *second*
+ * visit. One postMessage from the page closes that gap: open Nook once and it
+ * opens with no signal after that.
+ */
+self.addEventListener('message', (event) => {
+  const { type, urls } = event.data ?? {};
+  if (type !== 'cache-assets' || !Array.isArray(urls)) return;
+  event.waitUntil(
+    caches.open(CACHE).then((c) => Promise.all(
+      urls.map((u) => c.match(u).then((hit) => (hit ? null : c.add(u).catch(() => null)))),
+    )),
+  );
+});
+
 self.addEventListener('fetch', (event) => {
   const { request } = event;
   if (request.method !== 'GET') return;
