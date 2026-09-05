@@ -8,7 +8,7 @@ import { DoodleLayer } from './DoodleLayer';
 import { Icon } from './Icons';
 import { imageFromDataTransfer, isUrlLike, normalizeUrl, shrinkToBlob, toEmbed, unfurl } from '../lib/media';
 import { putFile } from '../lib/files';
-import { Empty } from './ui';
+import { Empty, usePhone } from './ui';
 import { DecorLayer } from './Decorations';
 import { HiddenMouse } from './Burrow';
 import { today } from '../lib/dates';
@@ -27,6 +27,7 @@ export function Board({ sector }: { sector: Sector }) {
   const select = useUI((s) => s.select);
   const toast = useUI((s) => s.toast);
   const hide = useDoc((s) => s.doc.garden.hide);
+  const phone = usePhone();
   const scrollRef = useRef<HTMLDivElement>(null);
   const [dropping, setDropping] = useState(false);
 
@@ -36,7 +37,27 @@ export function Board({ sector }: { sector: Sector }) {
     return { w: right + PAD, h: bottom + PAD };
   }, [widgets]);
 
-  const drawing = tool !== 'select';
+  const drawing = tool !== 'select' && !phone;
+
+  /**
+   * On a phone the board stops being a canvas and becomes a column.
+   *
+   * Free placement is the whole point of Nook on a laptop and completely
+   * unusable on a 390px screen — a widget at x=904 is simply off the edge.
+   * So the cards stack, in the order you laid them out: roughly top to
+   * bottom, and left to right within a band, which is how you'd read the
+   * board if you could see all of it.
+   *
+   * Nothing is moved. The coordinates stay exactly as they are, so the same
+   * board on a laptop is untouched.
+   */
+  const stacked = useMemo(
+    () => [...widgets].sort((a, b) => {
+      const band = Math.round(a.y / 140) - Math.round(b.y / 140);
+      return band !== 0 ? band : a.x - b.x;
+    }),
+    [widgets],
+  );
 
   /**
    * Once a day the mouse tucks themselves behind a widget. The tail is drawn
@@ -126,18 +147,34 @@ export function Board({ sector }: { sector: Sector }) {
       }}
     >
       <div
-        style={{
-          position: 'relative',
-          width: Math.max(size.w, 100),
-          height: Math.max(size.h, 100),
-          minWidth: '100%',
-          minHeight: '100%',
-        }}
+        style={
+          phone
+            ? {
+              position: 'relative',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 14,
+              padding: '14px 12px calc(96px + var(--safe-bottom))',
+              minHeight: '100%',
+            }
+            : {
+              position: 'relative',
+              width: Math.max(size.w, 100),
+              height: Math.max(size.h, 100),
+              minWidth: '100%',
+              minHeight: '100%',
+            }
+        }
       >
-        <div className={`grid-hint ${dragging && sector.snap ? 'show' : ''}`} />
+        {!phone && <div className={`grid-hint ${dragging && sector.snap ? 'show' : ''}`} />}
 
-        {/* tape and stickers sit under the widgets, like real tape under a card */}
-        <DecorLayer sectorId={sector.id} editable={decorating} />
+        {/*
+          Tape, stickers and doodles are placed at board coordinates, so they
+          can't follow a card into a stacked column — they'd land on the wrong
+          thing. They sit out the phone layout rather than lie about where
+          they are; the board still has them when you open it on a laptop.
+        */}
+        {!phone && <DecorLayer sectorId={sector.id} editable={decorating} />}
 
         {widgets.length === 0 && (
           <div style={{ position: 'absolute', inset: 0, display: 'grid', placeItems: 'center', pointerEvents: 'none' }}>
@@ -152,15 +189,23 @@ export function Board({ sector }: { sector: Sector }) {
           </div>
         )}
 
-        {hidingBehind && <HiddenMouse key={`hide-${hidingBehind.id}`} widget={hidingBehind} />}
+        {!phone && hidingBehind && <HiddenMouse key={`hide-${hidingBehind.id}`} widget={hidingBehind} />}
 
-        {widgets.map((w) => (
-          <WidgetFrame key={w.id} widget={w} sector={sector} locked={drawing || decorating}>
+        {(phone ? stacked : widgets).map((w) => (
+          <WidgetFrame
+            key={w.id}
+            widget={w}
+            sector={sector}
+            locked={drawing || decorating || phone}
+            stacked={phone}
+          >
             <WidgetBody widget={w} sector={sector} />
           </WidgetFrame>
         ))}
 
-        <DoodleLayer sectorId={sector.id} width={Math.max(size.w, 2000)} height={Math.max(size.h, 1400)} />
+        {!phone && (
+          <DoodleLayer sectorId={sector.id} width={Math.max(size.w, 2000)} height={Math.max(size.h, 1400)} />
+        )}
       </div>
 
       <AnimatePresence>

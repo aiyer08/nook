@@ -19,6 +19,7 @@ import { Avatar } from './Avatar';
 import { Icon } from './Icons';
 import { useDoc, useUI, widgetsOf } from '../lib/store';
 import { TASK_DRAG } from '../lib/dnd';
+import { usePhone } from './ui';
 import { today } from '../lib/dates';
 import { play } from '../lib/sound';
 import type { Widget } from '../lib/types';
@@ -68,6 +69,7 @@ export function Burrow() {
   const setMood = useUI((s) => s.setMood);
   const setPanel = useUI((s) => s.setPanel);
 
+  const phone = usePhone();
   const [phase, setPhase] = useState<Phase>('peek');
   const [hovered, setHovered] = useState(false);
   const [droppable, setDroppable] = useState(false);
@@ -125,7 +127,13 @@ export function Burrow() {
     window.setTimeout(() => setSaid((cur) => (cur === line ? null : cur)), 3400);
   }, []);
 
-  if (!settings.burrow) return null;
+  /*
+    Not on a phone. It's a fixed 90px mound in the bottom-left corner, which
+    on a laptop is charming and on a 390px screen sits on top of whatever card
+    is down there. The mouse is still in the top bar, and a task's own detail
+    still has "give it to them" for the courier trick.
+  */
+  if (!settings.burrow || phone) return null;
 
   const mood = phase === 'nap' ? 'sleepy' : hovered || carrying ? 'happy' : 'idle';
   // how far down the hole they are
@@ -147,7 +155,11 @@ export function Burrow() {
   return (
     <div
       style={{
-        position: 'fixed', left: 14, bottom: 8, zIndex: 26,
+        position: 'fixed',
+        left: 14,
+        // clear of the home indicator on a laptop with a touch bar, and on iPads
+        bottom: 'calc(8px + var(--safe-bottom))',
+        zIndex: 26,
         width: 118, height: 96, pointerEvents: 'none',
       }}
     >

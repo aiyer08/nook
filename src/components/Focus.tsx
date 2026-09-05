@@ -158,11 +158,13 @@ export function FocusOverlay() {
         exit={{ y: 90, opacity: 0 }}
         transition={{ type: 'spring', stiffness: 320, damping: 30 }}
         style={{
-          position: 'fixed', left: '50%', bottom: 18, transform: 'translateX(-50%)',
-          zIndex: 62, display: 'flex', alignItems: 'center', gap: 14,
+          position: 'fixed', left: '50%', bottom: 'calc(18px + var(--safe-bottom))',
+          transform: 'translateX(-50%)',
+          zIndex: 62, display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap',
+          justifyContent: 'center',
           padding: '12px 16px', borderRadius: 'var(--r-lg)',
           border: '3px solid var(--line)', background: 'var(--surface)',
-          boxShadow: 'var(--shadow-lg)', maxWidth: 'min(560px, 94vw)',
+          boxShadow: 'var(--shadow-lg)', maxWidth: 'min(560px, calc(100vw - 20px))',
         }}
       >
         {/* the seedling for this session */}

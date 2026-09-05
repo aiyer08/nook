@@ -111,7 +111,11 @@ export function TodayView({ open, onClose }: { open: boolean; onClose: () => voi
             exit={{ y: 16, opacity: 0 }}
             transition={{ type: 'spring', stiffness: 300, damping: 32 }}
             className="scroll"
-            style={{ height: '100%', overflowY: 'auto' }}
+            style={{
+              height: '100%', overflowY: 'auto',
+              paddingTop: 'var(--safe-top)',
+              paddingBottom: 'calc(24px + var(--safe-bottom))',
+            }}
           >
             <div style={{ maxWidth: 760, margin: '0 auto', padding: '22px 20px 90px' }}>
               {/* header */}

@@ -62,11 +62,18 @@ export function Onboarding() {
   return (
     <div
       style={{
-        minHeight: '100dvh', display: 'grid', placeItems: 'center', padding: 24,
+        minHeight: '100dvh', display: 'grid', placeItems: 'center',
+        // 24px of margin either side is a lot of a 390px screen
+        padding: 'max(clamp(10px, 3vw, 24px), var(--safe-left)) clamp(10px, 3vw, 24px)'
+          + ' calc(clamp(10px, 3vw, 24px) + var(--safe-bottom))',
+        paddingTop: 'calc(clamp(10px, 3vw, 24px) + var(--safe-top))',
         position: 'relative', zIndex: 1,
       }}
     >
-      <div className="card" style={{ width: 'min(760px, 100%)', padding: '28px 30px 24px' }}>
+      <div
+        className="card"
+        style={{ width: 'min(760px, 100%)', padding: 'clamp(16px, 5vw, 30px) clamp(14px, 5vw, 30px) 24px' }}
+      >
         {/* progress ribbon */}
         <Row gap={6}>
           {steps.map((s, i) => (

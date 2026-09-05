@@ -3,9 +3,25 @@
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/bun.svg" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!--
+      viewport-fit=cover lets the page reach under the notch and the home
+      indicator; the safe-area insets in global.css keep anything important
+      out from under them. Zoom is deliberately left enabled — pinching a
+      planner is a reasonable thing to want to do, and inputs are 16px on
+      small screens so Safari has no reason to zoom on its own.
+    -->
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <meta name="theme-color" content="#FFFBF5" />
+    <meta name="color-scheme" content="light dark" />
     <title>Nook — your cozy life planner</title>
+
+    <!-- add to home screen, on iOS and everywhere else -->
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <link rel="apple-touch-icon" href="/icon-180.png" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="Nook" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link

@@ -5,6 +5,30 @@ import { createPortal } from 'react-dom';
 import { Icon, type IconName } from './Icons';
 import { useUI } from '../lib/store';
 
+/* ---------------- what kind of screen is this ---------------- */
+
+/**
+ * Is this a phone-sized screen?
+ *
+ * A media query rather than sniffing the user agent, and it re-runs on
+ * rotation. 760px catches an iPhone either way up and leaves iPads on the
+ * full canvas, where free placement still makes sense.
+ */
+export function usePhone(): boolean {
+  const query = '(max-width: 760px)';
+  const [phone, setPhone] = useState(
+    () => typeof window !== 'undefined' && window.matchMedia(query).matches,
+  );
+  useEffect(() => {
+    const mq = window.matchMedia(query);
+    const onChange = (e: MediaQueryListEvent) => setPhone(e.matches);
+    mq.addEventListener('change', onChange);
+    setPhone(mq.matches);
+    return () => mq.removeEventListener('change', onChange);
+  }, []);
+  return phone;
+}
+
 /* ---------------- popovers that escape their box ---------------- */
 
 /**
@@ -198,6 +222,7 @@ export function Panel({
   side?: 'right' | 'left';
 }) {
   useEscape(open, onClose);
+  const phone = usePhone();
   return (
     <AnimatePresence>
       {open && (
@@ -215,18 +240,23 @@ export function Panel({
           />
           <motion.aside
             key="panel"
-            initial={{ x: side === 'right' ? width + 40 : -(width + 40) }}
+            initial={{ x: side === 'right' ? '100%' : '-100%' }}
             animate={{ x: 0 }}
-            exit={{ x: side === 'right' ? width + 40 : -(width + 40) }}
+            exit={{ x: side === 'right' ? '100%' : '-100%' }}
             transition={{ type: 'spring', stiffness: 320, damping: 32 }}
             style={{
               position: 'fixed', top: 0, bottom: 0, [side]: 0,
-              width: `min(${width}px, 94vw)`, zIndex: 61,
+              // a phone gets the whole screen: a 420px drawer on a 390px
+              // display is a drawer with a useless sliver of board behind it
+              width: phone ? '100%' : `min(${width}px, 94vw)`,
+              zIndex: 61,
               background: 'var(--bg)',
-              borderLeft: side === 'right' ? '3px solid var(--line)' : undefined,
-              borderRight: side === 'left' ? '3px solid var(--line)' : undefined,
+              borderLeft: !phone && side === 'right' ? '3px solid var(--line)' : undefined,
+              borderRight: !phone && side === 'left' ? '3px solid var(--line)' : undefined,
               display: 'flex', flexDirection: 'column',
               boxShadow: 'var(--shadow-lg)',
+              paddingTop: 'var(--safe-top)',
+              paddingBottom: 'var(--safe-bottom)',
             }}
           >
             <header
@@ -246,7 +276,17 @@ export function Panel({
                 <Icon name="close" size={18} />
               </button>
             </header>
-            <div className="scroll" style={{ flex: 1, padding: 20 }}>{children}</div>
+            <div
+              className="scroll"
+              style={{
+                flex: 1, padding: 20,
+                // room for a thumb at the bottom of a long panel
+                paddingBottom: phone ? 40 : 20,
+                WebkitOverflowScrolling: 'touch',
+              }}
+            >
+              {children}
+            </div>
           </motion.aside>
         </>
       )}
@@ -418,6 +458,7 @@ export function Toasts() {
       style={{
         position: 'fixed', left: '50%', bottom: 22, transform: 'translateX(-50%)',
         zIndex: 9000, display: 'flex', flexDirection: 'column', gap: 8, alignItems: 'center',
+        paddingBottom: 'var(--safe-bottom)',
         pointerEvents: 'none',
       }}
     >

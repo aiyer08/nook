@@ -12,6 +12,7 @@ import { GardenPicker } from './components/Garden';
 import { GardenPage } from './components/GardenPage';
 import { WrappedPanel } from './components/Wrapped';
 import { Burrow } from './components/Burrow';
+import { AddToHome } from './components/AddToHome';
 import { LampGlow, WeatherWatch } from './components/Sky';
 import { FocusOverlay } from './components/Focus';
 import { CalendarSyncPanel, useAutoSync } from './components/CalendarSync';
@@ -271,6 +272,7 @@ export default function App() {
 
       <Confetti trigger={celebrate} enabled={doc.settings.confetti} />
       <Toasts />
+      <AddToHome />
 
     </div>
     </MotionConfig>

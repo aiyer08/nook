@@ -263,3 +263,75 @@ h1, h2, h3, h4 { margin: 0; font-weight: 700; letter-spacing: -0.01em; }
 @media (prefers-reduced-motion: reduce) {
   * { animation-duration: 0.001ms !important; transition-duration: 0.001ms !important; }
 }
+
+/* ------------------------------------------------------------------
+   Phones
+   ------------------------------------------------------------------
+   Nook is a free-placement canvas, which is lovely with a mouse and
+   hopeless on a 390px screen — so on a phone the board stacks into one
+   column (see Board.tsx) and this handles the rest of what iOS needs.
+   ------------------------------------------------------------------ */
+
+/* The notch and the home indicator. Set once, used by every fixed thing. */
+:root {
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-left: env(safe-area-inset-left, 0px);
+  --safe-right: env(safe-area-inset-right, 0px);
+}
+
+@media (max-width: 760px) {
+  /*
+    16px is not a style choice: Safari zooms the whole page in when you focus
+    an input with text smaller than that, and then leaves you zoomed. Every
+    field in the app is 12–14px on desktop, so they all get bumped here.
+  */
+  /*
+    !important is doing real work here: nearly every field in the app sets its
+    own font-size inline (12–14px, which reads nicely on a laptop), and an
+    inline style beats a stylesheet rule. Without this the rule silently does
+    nothing and Safari zooms the page on every tap into a field.
+  */
+  input, textarea, select {
+    font-size: 16px !important;
+    /* iOS ignores padding on date inputs otherwise */
+    -webkit-appearance: none;
+    appearance: none;
+  }
+  input[type='date'], input[type='time'] { min-height: 44px; }
+  input[type='range'] { -webkit-appearance: auto; appearance: auto; }
+  input[type='checkbox'], input[type='radio'] { -webkit-appearance: auto; appearance: auto; }
+
+  /* Apple's own minimum for something you tap with a thumb. */
+  .btn { min-height: 44px; padding: 10px 14px; }
+  .btn.tiny { min-height: 36px; }
+  .btn.icon { min-width: 44px; min-height: 44px; }
+  .chip { min-height: 32px; }
+
+  /* the top bar and anything pinned to an edge clears the notch */
+  header { padding-top: var(--safe-top); }
+}
+
+/*
+  Touch, rather than screen size: a small window on a laptop still wants
+  hover, and an iPad with a keyboard doesn't.
+*/
+@media (hover: none) and (pointer: coarse) {
+  /* kill the 300ms wait Safari spends deciding whether you double-tapped */
+  button, a, .btn, .chip, [role='button'] { touch-action: manipulation; }
+  /* the grey flash on tap looks like a bug in a hand-drawn app */
+  * { -webkit-tap-highlight-color: transparent; }
+  /* dragging a card shouldn't select the text on it */
+  .no-touch-select { -webkit-user-select: none; user-select: none; }
+}
+
+/* Scroll containers get momentum and stop the page bouncing behind them. */
+.scroll { overscroll-behavior: contain; }
+
+/*
+  Standalone (added to the Home Screen) has no browser chrome to scroll away,
+  so the app can own the whole viewport.
+*/
+@media (display-mode: standalone) {
+  body { overscroll-behavior-y: none; }
+}

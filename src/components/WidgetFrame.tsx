@@ -18,9 +18,11 @@ interface Props {
   sector: Sector;
   children: ReactNode;
   locked: boolean;
+  /** phone layout: one full-width card per row, no free placement */
+  stacked?: boolean;
 }
 
-export function WidgetFrame({ widget, sector, children, locked }: Props) {
+export function WidgetFrame({ widget, sector, children, locked, stacked = false }: Props) {
   const placeWidget = useDoc((s) => s.placeWidget);
   const updateWidget = useDoc((s) => s.updateWidget);
   const removeWidget = useDoc((s) => s.removeWidget);
@@ -162,21 +164,29 @@ export function WidgetFrame({ widget, sector, children, locked }: Props) {
       animate={{
         // pick-up: a small lift so it feels like you actually grabbed it
         scale: active ? 1.03 : focused ? 1.015 : 1,
-        rotate: active ? 0 : widget.rotation,
+        rotate: stacked || active ? 0 : widget.rotation,
         opacity: dimmed ? 0.28 : 1,
       }}
       transition={{ type: 'spring', stiffness: 520, damping: 34 }}
       style={{
-        position: 'absolute',
-        left: x,
-        top: y,
-        width: w,
-        height: widget.collapsed ? undefined : h,
-        zIndex: active ? 999 : focused ? 998 : widget.z,
+        /*
+          Stacked: the card is just a block in a column. The saved x/y/w/h are
+          left alone — they're what the laptop layout uses — except for the
+          height, which is capped so a tall card can't own the whole screen.
+        */
+        position: stacked ? 'relative' : 'absolute',
+        left: stacked ? undefined : x,
+        top: stacked ? undefined : y,
+        width: stacked ? '100%' : w,
+        height: widget.collapsed ? undefined : stacked ? Math.min(h, 520) : h,
+        maxHeight: stacked && !widget.collapsed ? '76vh' : undefined,
+        minHeight: stacked && !widget.collapsed ? 200 : undefined,
+        flexShrink: stacked ? 0 : undefined,
+        zIndex: active ? 999 : focused ? 998 : stacked ? undefined : widget.z,
         background: 'var(--surface)',
         // with wobble on, the real edge is the SVG below; this keeps the box
         // the same size so nothing shifts when you toggle it
-        border: `3px solid ${wobble ? 'transparent' : 'var(--line)'}`,
+        border: `3px solid ${wobble && !stacked ? 'transparent' : 'var(--line)'}`,
         borderRadius: 'var(--r-lg)',
         boxShadow: active ? 'var(--shadow-lg)' : 'var(--shadow-md)',
         display: 'flex',
@@ -191,7 +201,7 @@ export function WidgetFrame({ widget, sector, children, locked }: Props) {
       aria-label={widget.title}
     >
       {/* a hand-drawn edge: the same rectangle, drawn by a slightly unsteady hand */}
-      {wobble && !widget.collapsed && (
+      {wobble && !widget.collapsed && !stacked && (
         <svg
           width={w}
           height={h}
@@ -212,7 +222,7 @@ export function WidgetFrame({ widget, sector, children, locked }: Props) {
       )}
 
       {/* snow, if it's actually snowing where you are */}
-      {sky?.sky === 'snow' && !widget.collapsed && <SnowCap width={w} />}
+      {sky?.sky === 'snow' && !widget.collapsed && !stacked && <SnowCap width={w} />}
 
       {/* washi tape */}
       {widget.tape !== 'none' && (

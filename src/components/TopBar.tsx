@@ -7,6 +7,7 @@ import { readableOn } from '../lib/themes';
 import { play } from '../lib/sound';
 import { SyncBadge } from './CalendarSync';
 import { DecorDrawer } from './Decorations';
+import { Popover, usePhone } from './ui';
 
 const PEN_COLORS = ['#4A3B35', '#E8697F', '#EFA3B0', '#EFCE7B', '#9FCFB8', '#A3C4E0', '#C0A9DB', '#F2B58F'];
 
@@ -32,8 +33,11 @@ export function TopBar() {
   const dragging = useUI((s) => s.dragging);
   const setDecorating = useUI((s) => s.setDecorating);
 
+  const phone = usePhone();
   const [penOpen, setPenOpen] = useState(false);
   const [decorOpen, setDecorOpen] = useState(false);
+  const [moreOpen, setMoreOpen] = useState(false);
+  const moreBtn = useRef<HTMLButtonElement>(null);
   const penRef = useRef<HTMLDivElement>(null);
   const decorRef = useRef<HTMLDivElement>(null);
   const sectors = sortedSectors(doc.sectors);
@@ -86,6 +90,7 @@ export function TopBar() {
           onClick={() => setPanel('avatar')}
           style={{ padding: '2px 10px 2px 2px', gap: 6 }}
           title={`${doc.avatar.name} — dress them up`}
+          aria-label={`${doc.avatar.name} — dress them up`}
         >
           <span style={{ width: 38, height: 38, display: 'grid', placeItems: 'center', overflow: 'hidden' }}>
             <Avatar
@@ -98,15 +103,21 @@ export function TopBar() {
               animate={doc.settings.motion}
             />
           </span>
-          <span className="hand" style={{ fontSize: 26, lineHeight: 1 }}>nook</span>
+          {!phone && <span className="hand" style={{ fontSize: 26, lineHeight: 1 }}>nook</span>}
         </button>
 
         <span style={{ flex: 1 }} />
 
         <SyncBadge onClick={() => setPanel('calendars')} />
 
-        <button className="btn" onClick={() => setTodayOpen(true)} title="Everything due today, across every tab (T)">
-          <Icon name="today" size={17} /> Today
+        <button
+          className="btn"
+          onClick={() => setTodayOpen(true)}
+          title="Everything due today, across every tab (T)"
+          aria-label="Today"
+        >
+          <Icon name="today" size={17} />
+          {!phone && ' Today'}
         </button>
 
         {/* the garden you're growing, and the seeds waiting to go in */}
@@ -114,9 +125,11 @@ export function TopBar() {
           className="btn"
           onClick={() => setPanel('garden')}
           title="The garden you've grown (G)"
+          aria-label="The garden"
           style={{ position: 'relative' }}
         >
-          <Icon name="sprout" size={17} /> Garden
+          <Icon name="sprout" size={17} />
+          {!phone && ' Garden'}
           {seeds > 0 && (
             <span
               style={{
@@ -132,13 +145,22 @@ export function TopBar() {
           )}
         </button>
 
+        {/*
+          The pen, the tape and the undo pair are desktop clusters — they'd
+          take the whole width of a phone. They move into the ••• menu, and
+          the doodle layer itself sits out the phone layout, since drawing on
+          a column of cards that scrolls isn't a thing you can aim at.
+        */}
+        {!phone && (
         <div style={{ display: 'flex', gap: 3, padding: 3, borderRadius: 'var(--r)', border: '3px solid var(--line)', background: 'var(--surface)' }}>
           <ToolBtn icon="grip" label="Move things (V)" on={tool === 'select'} onClick={() => setTool('select')} />
           <ToolBtn icon="pen" label="Pen (P)" on={tool === 'pen'} onClick={() => { setTool('pen'); setPenOpen(true); }} />
           <ToolBtn icon="marker" label="Highlighter (M)" on={tool === 'marker'} onClick={() => { setTool('marker'); setPenOpen(true); }} />
           <ToolBtn icon="eraser" label="Eraser (E)" on={tool === 'eraser'} onClick={() => setTool('eraser')} />
         </div>
+        )}
 
+        {!phone && (
         <div style={{ position: 'relative' }} ref={penRef}>
           <button
             className="btn icon"
@@ -185,8 +207,10 @@ export function TopBar() {
             </div>
           )}
         </div>
+        )}
 
         {/* the decoration drawer */}
+        {!phone && (
         <div style={{ position: 'relative' }} ref={decorRef}>
           <button
             className={`btn icon ${decorOpen || decorating ? 'primary' : ''}`}
@@ -216,7 +240,9 @@ export function TopBar() {
             </div>
           )}
         </div>
+        )}
 
+        {!phone && (
         <div style={{ display: 'flex', gap: 3 }}>
           <button className="btn icon" onClick={undo} disabled={past === 0} aria-label="Undo" title="Undo (⌘Z)">
             <Icon name="undo" size={17} />
@@ -225,14 +251,51 @@ export function TopBar() {
             <Icon name="redo" size={17} />
           </button>
         </div>
+        )}
 
-        <button className="btn primary" onClick={() => setPanel('widgets')} title="Add a widget (N)">
-          <Icon name="plus" size={17} /> Widget
+        <button
+          className="btn primary"
+          onClick={() => setPanel('widgets')}
+          title="Add a widget (N)"
+          aria-label="Add a widget"
+        >
+          <Icon name="plus" size={17} />
+          {!phone && ' Widget'}
         </button>
 
-        <button className="btn icon" onClick={() => setPanel('settings')} aria-label="Settings">
-          <Icon name="gear" size={17} />
-        </button>
+        {phone ? (
+          <>
+            <button
+              ref={moreBtn}
+              className="btn icon"
+              onClick={() => setMoreOpen((v) => !v)}
+              aria-label="More"
+              aria-expanded={moreOpen}
+            >
+              <Icon name="dots" size={17} />
+            </button>
+            <Popover open={moreOpen} anchor={moreBtn} onClose={() => setMoreOpen(false)} width={216} align="right">
+              <div style={{ display: 'grid', gap: 2 }}>
+                <MoreItem icon="undo" label="Undo" disabled={past === 0} onClick={() => { undo(); setMoreOpen(false); }} />
+                <MoreItem icon="redo" label="Redo" disabled={future === 0} onClick={() => { redo(); setMoreOpen(false); }} />
+                <div style={{ height: 1, background: 'var(--line)', margin: '5px 0' }} />
+                <MoreItem icon="star" label="Nook Wrapped" onClick={() => { setPanel('wrapped'); setMoreOpen(false); }} />
+                <MoreItem icon="calendar" label="Calendars" onClick={() => { setPanel('calendars'); setMoreOpen(false); }} />
+                <MoreItem icon="grid" label="Your tabs" onClick={() => { setPanel('sectors'); setMoreOpen(false); }} />
+                <MoreItem icon="paw" label={doc.avatar.name} onClick={() => { setPanel('avatar'); setMoreOpen(false); }} />
+                <MoreItem icon="gear" label="Settings" onClick={() => { setPanel('settings'); setMoreOpen(false); }} />
+                <p style={{ margin: '6px 2px 0', fontSize: 11, color: 'var(--ink-faint)', lineHeight: 1.4 }}>
+                  Tape, stickers and the pen live on a bigger screen — they're placed on the page
+                  itself, which a phone stacks into a column.
+                </p>
+              </div>
+            </Popover>
+          </>
+        ) : (
+          <button className="btn icon" onClick={() => setPanel('settings')} aria-label="Settings">
+            <Icon name="gear" size={17} />
+          </button>
+        )}
       </div>
 
       {/* a way out of arranging mode that doesn't require finding the button again */}
@@ -260,7 +323,10 @@ export function TopBar() {
       {/* row 2 — tabs */}
       <div
         className="scroll"
-        style={{ display: 'flex', gap: 6, padding: '0 14px 10px', overflowX: 'auto', alignItems: 'flex-end' }}
+        style={{
+          display: 'flex', gap: 6, overflowX: 'auto', alignItems: 'flex-end',
+          padding: '0 max(14px, var(--safe-left)) 10px max(14px, var(--safe-left))',
+        }}
       >
         {sectors.map((s) => {
           const on = s.id === active;
@@ -275,7 +341,10 @@ export function TopBar() {
               style={{
                 position: 'relative',
                 display: 'flex', alignItems: 'center', gap: 7,
-                padding: on ? '9px 16px 11px' : '7px 14px 9px',
+                // a tab is a primary control on a phone; make it thumb-sized
+                padding: phone
+                  ? (on ? '12px 16px 14px' : '11px 14px 12px')
+                  : (on ? '9px 16px 11px' : '7px 14px 9px'),
                 borderRadius: '16px 16px 0 0',
                 border: dragging && !on ? '3px dashed var(--ink-soft)' : '3px solid var(--line)',
                 borderBottom: 'none',
@@ -312,6 +381,21 @@ export function TopBar() {
         </button>
       </div>
     </header>
+  );
+}
+
+function MoreItem({
+  icon, label, onClick, disabled,
+}: { icon: IconName; label: string; onClick: () => void; disabled?: boolean }) {
+  return (
+    <button
+      className="btn ghost"
+      onClick={onClick}
+      disabled={disabled}
+      style={{ width: '100%', justifyContent: 'flex-start', fontSize: 14 }}
+    >
+      <Icon name={icon} size={16} /> {label}
+    </button>
   );
 }
 

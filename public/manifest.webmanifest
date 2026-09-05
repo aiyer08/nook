@@ -1,0 +1,16 @@
+{
+  "name": "Nook — your cozy life planner",
+  "short_name": "Nook",
+  "description": "A cozy, hand-drawn planner for the parts of your life.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#FFFBF5",
+  "theme_color": "#FFFBF5",
+  "icons": [
+    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
