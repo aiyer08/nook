@@ -9,6 +9,7 @@ import { PASTELS, THEMES } from './themes';
 import { addDays, seasonOf, today, toDateStr } from './dates';
 import { unlockedIds } from './cosmetics';
 import { nextPlot, seedsDue } from './growth';
+import { moveWidgetTo } from './move';
 import type { Weather } from './weather';
 
 const STORAGE_KEY = 'nook.doc.v2';
@@ -403,6 +404,8 @@ interface DocState {
   patchWidgetData: (id: ID, patch: Partial<Widget['data']>) => void;
   placeWidget: (id: ID, x: number, y: number, w?: number, h?: number) => void;
   removeWidget: (id: ID) => void;
+  /** send a widget, and everything filed in it, to another tab */
+  moveWidgetToSector: (id: ID, sectorId: ID) => boolean;
   duplicateWidget: (id: ID) => void;
   raiseWidget: (id: ID) => void;
 
@@ -669,6 +672,27 @@ export const useDoc = create<DocState>((set, get) => ({
    * removes them from Nook and cuts the calendar link, but leaves Google
    * untouched. Tidying your board should never empty your real calendar.
    */
+  moveWidgetToSector: (id, sectorId) => {
+    const { doc } = get();
+    const widget = doc.widgets.find((w) => w.id === id);
+    if (!widget || widget.sectorId === sectorId) return false;
+    if (!doc.sectors.some((s) => s.id === sectorId)) return false;
+
+    // find it somewhere free on the destination board rather than dropping it
+    // on top of whatever happens to share its coordinates over there
+    const spot = nextSlot(
+      doc.widgets.filter((w) => w.sectorId === sectorId),
+      widget.w,
+      widget.h,
+    );
+
+    let moved = false;
+    get().commit('move to another tab', (d) => {
+      moved = moveWidgetTo(d, id, sectorId, spot);
+    });
+    return moved;
+  },
+
   removeWidget: (id) =>
     get().commit('delete widget', (d) => {
       d.widgets = d.widgets.filter((w) => w.id !== id);

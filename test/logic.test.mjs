@@ -14,6 +14,7 @@ import {
 } from '../src/lib/growth.ts';
 import { skyFromCode } from '../src/lib/weather.ts';
 import { compareGoalDue, compareRows, compareTaskDue, dueFieldOf, taskWhen } from '../src/lib/due.ts';
+import { moveWidgetTo, travellingWith } from '../src/lib/move.ts';
 import { compareBy, COLLECTION_PRESETS, presetById } from '../src/lib/collections.ts';
 import { completionDates, describeWeek, weekStart, wrapUp } from '../src/lib/wrapped.ts';
 
@@ -751,6 +752,68 @@ t('blank cells stay at the bottom when the sort is reversed', () => {
   const down = [...rows].sort((a, b) => compareRows(field, a.values, b.values, -1, compareBy));
   assert.deepEqual(up.map((r) => r.id), ['sep', 'oct', 'blank']);
   assert.deepEqual(down.map((r) => r.id), ['oct', 'sep', 'blank']);
+});
+
+console.log('\nmoving a widget between tabs');
+
+const twoTabs = () => ({
+  sectors: [
+    { id: 'school', name: 'School', accent: '#c', icon: 'book', order: 0, snap: true },
+    { id: 'health', name: 'Health', accent: '#m', icon: 'heart', order: 1, snap: true },
+  ],
+  widgets: [
+    { id: 'w1', sectorId: 'school', type: 'todo', title: 'To-do', x: 40, y: 40, w: 340, h: 360, z: 3, rotation: 0, tape: 'none', data: {} },
+    { id: 'w2', sectorId: 'health', type: 'notes', title: 'Notes', x: 20, y: 20, w: 300, h: 200, z: 7, rotation: 0, tape: 'none', data: {} },
+  ],
+  tasks: [
+    task({ id: 't1', widgetId: 'w1', sectorId: 'school' }),
+    task({ id: 't2', widgetId: 'other', sectorId: 'school' }),
+  ],
+  events: [{ id: 'e1', widgetId: 'w1', sectorId: 'school', kind: 'meeting', title: 'm', date: T }],
+  goals: [{ id: 'g1', widgetId: 'w1', sectorId: 'school', title: 'g', target: 1, current: 0, unit: '', notes: '', done: false }],
+  contacts: [{ id: 'c1', widgetId: 'w1', sectorId: 'school', name: 'A' }],
+  items: [{ id: 'i1', widgetId: 'w1', sectorId: 'school', values: {}, order: 0, createdOn: T, checklist: [], materials: [], links: [], migrations: 0 }],
+  google: { clientId: '', links: [{ calendarId: 'cal', summary: 'c', sectorId: 'school', widgetId: 'w1', timeMin: T, writeBack: true }], pendingDeletes: [], autoSync: false },
+});
+
+t('everything filed in the widget moves with it', () => {
+  const d = twoTabs();
+  assert.equal(travellingWith(d, 'w1'), 5);
+  assert.equal(moveWidgetTo(d, 'w1', 'health', { x: 24, y: 400 }), true);
+
+  assert.equal(d.widgets[0].sectorId, 'health');
+  assert.deepEqual([d.widgets[0].x, d.widgets[0].y], [24, 400]);
+  for (const rec of [d.tasks[0], d.events[0], d.goals[0], d.contacts[0], d.items[0]]) {
+    assert.equal(rec.sectorId, 'health', 'a record was left behind on the old tab');
+  }
+  // a synced calendar keeps pointing at the widget it belongs to
+  assert.equal(d.google.links[0].sectorId, 'health');
+  // ...and nothing else was touched
+  assert.equal(d.tasks[1].sectorId, 'school');
+  assert.equal(d.widgets[1].sectorId, 'health');
+});
+
+t('it lands on top of the board it arrives on', () => {
+  const d = twoTabs();
+  moveWidgetTo(d, 'w1', 'health', { x: 0, y: 0 });
+  assert.equal(d.widgets[0].z, 8);   // the notes widget there was z 7
+});
+
+t('a move that would change nothing is refused', () => {
+  const d = twoTabs();
+  assert.equal(moveWidgetTo(d, 'w1', 'school', { x: 0, y: 0 }), false, 'same tab');
+  assert.equal(moveWidgetTo(d, 'w1', 'nope', { x: 0, y: 0 }), false, 'no such tab');
+  assert.equal(moveWidgetTo(d, 'ghost', 'health', { x: 0, y: 0 }), false, 'no such widget');
+  // refused means untouched, so no undo step gets pushed for nothing
+  assert.equal(d.widgets[0].sectorId, 'school');
+  assert.equal(d.tasks[0].sectorId, 'school');
+});
+
+t('a hand-picked widget colour survives the move', () => {
+  const d = twoTabs();
+  d.widgets[0].accent = '#EFCE7B';
+  moveWidgetTo(d, 'w1', 'health', { x: 0, y: 0 });
+  assert.equal(d.widgets[0].accent, '#EFCE7B');
 });
 
 console.log(`\n${pass} checks passed\n`);

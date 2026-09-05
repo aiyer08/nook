@@ -1,7 +1,7 @@
-import { useRef, useState, type ReactNode } from 'react';
+import { useMemo, useRef, useState, type ReactNode } from 'react';
 import { motion } from 'framer-motion';
-import { Icon } from './Icons';
-import { GRID, useDoc, useUI } from '../lib/store';
+import { Icon, type IconName } from './Icons';
+import { GRID, sortedSectors, useDoc, useUI } from '../lib/store';
 import type { Sector, Widget } from '../lib/types';
 import { PASTELS, readableOn } from '../lib/themes';
 import { seedFrom, wobblyRect } from '../lib/ink';
@@ -26,11 +26,14 @@ export function WidgetFrame({ widget, sector, children, locked }: Props) {
   const removeWidget = useDoc((s) => s.removeWidget);
   const duplicateWidget = useDoc((s) => s.duplicateWidget);
   const raiseWidget = useDoc((s) => s.raiseWidget);
+  const moveToSector = useDoc((s) => s.moveWidgetToSector);
+  const allSectors = useDoc((s) => s.doc.sectors);
   const sound = useDoc((s) => s.doc.settings.sound);
   const wobble = useDoc((s) => s.doc.settings.wobble);
   const selected = useUI((s) => s.selectedWidget === widget.id);
   const select = useUI((s) => s.select);
   const setDragging = useUI((s) => s.setDragging);
+  const toast = useUI((s) => s.toast);
   const focus = useUI((s) => s.focus);
   const sky = useUI((s) => s.sky);
 
@@ -58,6 +61,19 @@ export function WidgetFrame({ widget, sector, children, locked }: Props) {
 
   const snap = (v: number) => (sector.snap ? Math.round(v / GRID) * GRID : Math.round(v));
 
+  /** The other tabs, for the menu and for dropping onto. */
+  const elsewhere = useMemo(
+    () => sortedSectors(allSectors).filter((s) => s.id !== sector.id),
+    [allSectors, sector.id],
+  );
+
+  const sendTo = (id: string, name: string) => {
+    if (!moveToSector(widget.id, id)) return;
+    select(null);
+    play('page', sound);
+    toast(`“${widget.title}” is on ${name} now. ⌘Z brings it back.`);
+  };
+
   const startDrag = (e: React.PointerEvent) => {
     if (locked || e.button !== 0) return;
     raiseWidget(widget.id);
@@ -76,12 +92,27 @@ export function WidgetFrame({ widget, sector, children, locked }: Props) {
       last = { x: nx, y: ny };
       setDrag(last);
     };
-    const up = () => {
+    const up = (ev: PointerEvent) => {
       window.removeEventListener('pointermove', move);
       window.removeEventListener('pointerup', up);
       window.removeEventListener('pointercancel', up);
       setDrag(null);
       setDragging(false);
+
+      /*
+        Let go over a tab and the widget goes to that tab — the same gesture
+        as dragging a browser tab, and the reason the tabs light up while you
+        drag. The card itself is clipped by the board, so the pointer is the
+        thing that matters here, not where the card appears to be.
+      */
+      const over = document.elementFromPoint(ev.clientX, ev.clientY);
+      const tab = over?.closest?.('[data-sector-id]') as HTMLElement | null;
+      const dropId = tab?.dataset.sectorId;
+      if (dropId && dropId !== sector.id) {
+        const target = allSectors.find((s) => s.id === dropId);
+        if (target) { sendTo(target.id, target.name); return; }
+      }
+
       if (last.x !== originX || last.y !== originY) placeWidget(widget.id, last.x, last.y);
     };
     window.addEventListener('pointermove', move);
@@ -305,6 +336,31 @@ export function WidgetFrame({ widget, sector, children, locked }: Props) {
                   </button>
                 ))}
               </div>
+
+              {elsewhere.length > 0 && (
+                <>
+                  <MenuLabel>Move to tab</MenuLabel>
+                  <div style={{ display: 'flex', gap: 5, marginBottom: 8, flexWrap: 'wrap' }}>
+                    {elsewhere.map((s) => (
+                      <button
+                        key={s.id}
+                        className="btn tiny"
+                        onClick={() => { sendTo(s.id, s.name); setMenu(false); }}
+                        title={`Move this widget, and everything in it, to ${s.name}`}
+                        style={{
+                          borderColor: s.accent,
+                          background: `color-mix(in srgb, ${s.accent} 26%, var(--surface))`,
+                        }}
+                      >
+                        <Icon name={s.icon as IconName} size={12} /> {s.name}
+                      </button>
+                    ))}
+                  </div>
+                  <p style={{ fontSize: 11, color: 'var(--ink-faint)', margin: '-4px 2px 8px' }}>
+                    Or just drag the card onto a tab.
+                  </p>
+                </>
+              )}
 
               <MenuLabel>Tilt</MenuLabel>
               <input

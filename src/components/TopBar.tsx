@@ -28,6 +28,8 @@ export function TopBar() {
   const setPen = useUI((s) => s.setPen);
   const mood = useUI((s) => s.avatarMood);
   const decorating = useUI((s) => s.decorating);
+  // a widget is being dragged: the tabs become somewhere to drop it
+  const dragging = useUI((s) => s.dragging);
   const setDecorating = useUI((s) => s.setDecorating);
 
   const [penOpen, setPenOpen] = useState(false);
@@ -267,17 +269,20 @@ export function TopBar() {
               key={s.id}
               onClick={() => switchTab(s.id)}
               aria-current={on ? 'page' : undefined}
+              /* the drop target for "drag a widget onto a tab to move it" */
+              data-sector-id={s.id}
+              title={dragging && !on ? `Drop a widget here to move it to ${s.name}` : s.name}
               style={{
                 position: 'relative',
                 display: 'flex', alignItems: 'center', gap: 7,
                 padding: on ? '9px 16px 11px' : '7px 14px 9px',
                 borderRadius: '16px 16px 0 0',
-                border: '3px solid var(--line)',
+                border: dragging && !on ? '3px dashed var(--ink-soft)' : '3px solid var(--line)',
                 borderBottom: 'none',
                 background: on ? s.accent : `color-mix(in srgb, ${s.accent} 34%, var(--surface))`,
                 color: on ? readableOn(s.accent, '#4A3B35') : 'var(--ink-soft)',
                 fontWeight: 700, fontSize: 14,
-                marginBottom: on ? -3 : 0,
+                marginBottom: on ? -3 : dragging ? 4 : 0,
                 boxShadow: on ? 'var(--shadow-sm)' : 'none',
                 whiteSpace: 'nowrap',
                 transition: 'all 0.16s var(--spring)',
