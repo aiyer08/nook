@@ -11,11 +11,13 @@ import { play } from '../../../lib/sound';
 import { Reckoning } from '../../Reckoning';
 
 export function ItemCard({
-  item, fields, accent, onClose,
+  item, fields, accent, steps: suggested = [], onClose,
 }: {
   item: CollectionItem;
   fields: FieldDef[];
   accent: string;
+  /** the preset's suggested checklist — offered, never applied for you */
+  steps?: string[];
   onClose: () => void;
 }) {
   const setCell = useDoc((s) => s.setCell);
@@ -41,6 +43,10 @@ export function ItemCard({
   const dateField = fields.find((f) => f.type === 'date');
   const done = item.checklist.filter((s) => s.done).length;
   const missing = item.checklist.filter((s) => !s.done);
+  // suggestions this row hasn't taken up yet
+  const unused = suggested.filter(
+    (title) => !item.checklist.some((c) => c.title.toLowerCase() === title.toLowerCase()),
+  );
   const siblings = allItems.filter((i) => i.widgetId === item.widgetId && i.id !== item.id);
   const threaded = allItems.filter((i) => item.links.includes(i.id));
 
@@ -144,6 +150,35 @@ export function ItemCard({
             </button>
           </div>
         ))}
+        {/*
+          The preset's suggestions, as one-tap chips. They're offered rather
+          than added on your behalf — an application that arrives with six
+          unticked boxes you never chose reads as someone else's homework.
+        */}
+        {unused.length > 0 && (
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5, margin: '4px 0 7px' }}>
+            {unused.map((title) => (
+              <button
+                key={title}
+                className="btn tiny"
+                onClick={() => addStep(item.id, title)}
+                title={`Add "${title}" to this one`}
+              >
+                <Icon name="plus" size={11} /> {title}
+              </button>
+            ))}
+            {unused.length > 1 && (
+              <button
+                className="btn tiny ghost"
+                onClick={() => { for (const title of unused) addStep(item.id, title); }}
+                title="Add all of them"
+              >
+                all {unused.length}
+              </button>
+            )}
+          </div>
+        )}
+
         <input
           value={step}
           onChange={(e) => setStep(e.target.value)}

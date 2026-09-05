@@ -13,6 +13,8 @@ import {
   SEED_EVERY, canWater, daysToNextStage, growthDays, nextPlot, seedsDue, stageOf, towardNextSeed,
 } from '../src/lib/growth.ts';
 import { skyFromCode } from '../src/lib/weather.ts';
+import { compareGoalDue, compareRows, compareTaskDue, dueFieldOf, taskWhen } from '../src/lib/due.ts';
+import { compareBy, COLLECTION_PRESETS, presetById } from '../src/lib/collections.ts';
 import { completionDates, describeWeek, weekStart, wrapUp } from '../src/lib/wrapped.ts';
 
 let pass = 0;
@@ -648,6 +650,107 @@ t('an empty year says so instead of pretending', () => {
 t('the busiest week reads like a date', () => {
   assert.equal(describeWeek({ start: '2026-03-02', count: 4 }), '2–8 March');
   assert.equal(describeWeek({ start: '2026-03-30', count: 2 }), '30 March – 5 April');
+});
+
+console.log('\nsorting by what is due');
+
+const dated = (o) => task({ kind: 'dated', ...o });
+
+t('a deadline beats no deadline', () => {
+  const withDate = dated({ id: 'a', dueDate: '2026-12-01' });
+  const floating = task({ id: 'b' });
+  assert.ok(compareTaskDue(withDate, floating) < 0);
+  assert.ok(compareTaskDue(floating, withDate) > 0);
+});
+
+t('soonest first, and the time breaks the day', () => {
+  const list = [
+    dated({ id: 'late', dueDate: '2026-09-10' }),
+    dated({ id: 'nine', dueDate: '2026-09-04', dueTime: '09:00' }),
+    dated({ id: 'ten', dueDate: '2026-09-04', dueTime: '10:00' }),
+    dated({ id: 'noTime', dueDate: '2026-09-04' }),
+  ];
+  assert.deepEqual(
+    [...list].sort(compareTaskDue).map((x) => x.id),
+    ['noTime', 'nine', 'ten', 'late'],
+  );
+});
+
+t('a single-digit hour sorts before a double-digit one', () => {
+  // '9:00' unpadded would sort after '10:00' as text
+  assert.ok(taskWhen(dated({ dueDate: '2026-09-04', dueTime: '9:00' })) < taskWhen(dated({ dueDate: '2026-09-04', dueTime: '10:00' })));
+});
+
+t('floating tasks keep longest-waiting first, then your own order', () => {
+  const old = task({ id: 'old', createdOn: '2026-08-01', order: 9 });
+  const newer = task({ id: 'new', createdOn: '2026-09-01', order: 0 });
+  assert.ok(compareTaskDue(old, newer) < 0);
+  const sameDay = [
+    task({ id: 'second', order: 1 }),
+    task({ id: 'first', order: 0 }),
+  ];
+  assert.deepEqual([...sameDay].sort(compareTaskDue).map((x) => x.id), ['first', 'second']);
+});
+
+t('goals: still going first, soonest deadline first, done at the bottom', () => {
+  const goal = (o) => ({ id: 'g', widgetId: 'w', sectorId: 's', title: 'g', target: 1, current: 0, unit: '', notes: '', done: false, ...o });
+  const list = [
+    goal({ id: 'someday' }),
+    goal({ id: 'finished', done: true, dueDate: '2026-01-01' }),
+    goal({ id: 'soon', dueDate: '2026-09-09' }),
+    goal({ id: 'later', dueDate: '2026-11-01' }),
+  ];
+  assert.deepEqual(
+    [...list].sort(compareGoalDue).map((x) => x.id),
+    ['soon', 'later', 'someday', 'finished'],
+  );
+});
+
+t('the deadline column wins over other dates', () => {
+  const fields = [
+    { id: 'f1', name: 'Applied on', type: 'date' },
+    { id: 'f2', name: 'Deadline', type: 'date' },
+  ];
+  assert.equal(dueFieldOf(fields).id, 'f2');
+  assert.equal(dueFieldOf([fields[0]]).id, 'f1');
+  assert.equal(dueFieldOf([{ id: 'x', name: 'Notes', type: 'text' }]), undefined);
+});
+
+t('the application tracker sorts itself by its deadline', () => {
+  const built = presetById('applications').build();
+  const field = built.fields.find((f) => f.id === built.sortBy);
+  assert.equal(field.name, 'Deadline');
+  assert.equal(built.sortDir, 'asc');
+});
+
+t('a preset offers its checklist without applying it', () => {
+  const built = presetById('applications').build();
+  // the suggestions travel with the widget...
+  assert.deepEqual(built.steps, presetById('applications').checklist);
+  assert.equal(built.steps.length, 6);
+  // ...and a new row starts with nothing ticked or listed
+  assert.equal(built.items, undefined);
+});
+
+t('every preset with a date column sorts by one', () => {
+  for (const p of COLLECTION_PRESETS) {
+    const built = p.build();
+    const hasDate = built.fields.some((f) => f.type === 'date');
+    assert.equal(Boolean(built.sortBy), hasDate, `${p.id} disagrees about having a date`);
+  }
+});
+
+t('blank cells stay at the bottom when the sort is reversed', () => {
+  const field = { id: 'd', name: 'Deadline', type: 'date' };
+  const rows = [
+    { id: 'blank', values: {} },
+    { id: 'oct', values: { d: '2026-10-01' } },
+    { id: 'sep', values: { d: '2026-09-01' } },
+  ];
+  const up = [...rows].sort((a, b) => compareRows(field, a.values, b.values, 1, compareBy));
+  const down = [...rows].sort((a, b) => compareRows(field, a.values, b.values, -1, compareBy));
+  assert.deepEqual(up.map((r) => r.id), ['sep', 'oct', 'blank']);
+  assert.deepEqual(down.map((r) => r.id), ['oct', 'sep', 'blank']);
 });
 
 console.log(`\n${pass} checks passed\n`);

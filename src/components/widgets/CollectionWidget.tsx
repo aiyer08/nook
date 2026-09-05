@@ -15,6 +15,7 @@ import { BoardView, CalendarView, GalleryView, TableView } from './collection/vi
 import {
   COLLECTION_PRESETS, VIEW_ICON, VIEW_LABEL, compareBy, presetById, primaryField,
 } from '../../lib/collections';
+import { compareRows, dueFieldOf } from '../../lib/due';
 import { monthCursorOf, today } from '../../lib/dates';
 import { uid } from '../../lib/id';
 import { readableOn } from '../../lib/themes';
@@ -30,7 +31,6 @@ export function CollectionWidget({ widget, sector }: { widget: Widget; sector: S
   const addField = useDoc((s) => s.addField);
   const removeField = useDoc((s) => s.removeField);
   const updateWidget = useDoc((s) => s.updateWidget);
-  const addStep = useDoc((s) => s.addItemStep);
   const toast = useUI((s) => s.toast);
 
   const [openId, setOpenId] = useState<ID | null>(null);
@@ -44,13 +44,21 @@ export function CollectionWidget({ widget, sector }: { widget: Widget; sector: S
   const accent = widget.accent ?? sector.accent;
   const primary = primaryField(fields);
 
+  /**
+   * Sorted by deadline unless you've picked something else.
+   *
+   * Falling back to the due field rather than storing it means boards made
+   * before this existed sort themselves too, with no migration — and picking a
+   * different column still wins.
+   */
+  const dueField = useMemo(() => dueFieldOf(fields), [fields]);
   const items = useMemo(() => {
     const mine = itemsOf(allItems, widget.id);
-    const sortField = fields.find((f) => f.id === widget.data.sortBy);
+    const sortField = fields.find((f) => f.id === widget.data.sortBy) ?? dueField;
     if (!sortField) return mine;
     const dir = widget.data.sortDir === 'desc' ? -1 : 1;
-    return [...mine].sort((a, b) => compareBy(sortField, a.values, b.values) * dir);
-  }, [allItems, widget.id, fields, widget.data.sortBy, widget.data.sortDir]);
+    return [...mine].sort((a, b) => compareRows(sortField, a.values, b.values, dir, compareBy));
+  }, [allItems, widget.id, fields, dueField, widget.data.sortBy, widget.data.sortDir]);
 
   /* ---- not set up yet: offer the catalogue ---- */
   if (!fields.length) {
@@ -64,12 +72,11 @@ export function CollectionWidget({ widget, sector }: { widget: Widget; sector: S
       // first column rather than stranding it in "Unsorted"
       const group = built.fields.find((f) => f.id === built.groupBy);
       const firstOption = group?.options?.[0]?.id;
-      const first = addItem(
+      addItem(
         widget.id,
         widget.sectorId,
         group && firstOption ? { [group.id]: firstOption } : {},
       );
-      for (const step of p.checklist ?? []) addStep(first, step);
       toast(`${p.label} ready. ${VIEW_LABEL[built.view]} view to start.`);
     }} />;
   }
@@ -79,12 +86,21 @@ export function CollectionWidget({ widget, sector }: { widget: Widget; sector: S
     const merged = { ...values };
     if (title && primary) merged[primary.id] = title;
     const id = addItem(widget.id, widget.sectorId, merged);
-    // an application without its required-materials list is half a card
-    const preset = COLLECTION_PRESETS.find((p) => p.label === widget.title);
-    for (const step of preset?.checklist ?? []) addStep(id, step);
     setDraft('');
     if (!title) setOpenId(id);
   };
+
+  /**
+   * The checklist a row *could* have. Read from the widget, falling back to the
+   * preset it was built from, so boards made before this was stored still
+   * offer their list.
+   */
+  const suggestedSteps = useMemo(
+    () => widget.data.steps
+      ?? COLLECTION_PRESETS.find((p) => p.label === widget.title)?.checklist
+      ?? [],
+    [widget.data.steps, widget.title],
+  );
 
   const shared = {
     items, fields, accent, openId,
@@ -181,6 +197,7 @@ export function CollectionWidget({ widget, sector }: { widget: Widget; sector: S
                 item={items.find((i) => i.id === openId)!}
                 fields={fields}
                 accent={accent}
+                steps={suggestedSteps}
                 onClose={() => setOpenId(null)}
               />
             </motion.div>
@@ -281,6 +298,8 @@ function ColumnSettings({
   const selects = fields.filter((f) => f.type === 'select');
   const dates = fields.filter((f) => f.type === 'date');
   const urls = fields.filter((f) => f.type === 'url' || f.type === 'text');
+  // what "no explicit sort" actually does, so the menu doesn't imply nothing
+  const dueField = dueFieldOf(fields);
 
   const move = (i: number, delta: number) => {
     const j = i + delta;
@@ -305,6 +324,7 @@ function ColumnSettings({
         onChange={(v) => onPatch({ imageField: v })} empty="needs a link column" />
       <Selector label="Sort by" value={widget.data.sortBy} options={fields}
         onChange={(v) => onPatch({ sortBy: v })} empty="—"
+        emptyOption={dueField ? `${dueField.name} — soonest first` : 'The order you added them'}
         extra={
           <button
             className="btn tiny"
@@ -393,13 +413,16 @@ function ColumnSettings({
 }
 
 function Selector({
-  label, value, options, onChange, empty, extra,
+  label, value, options, onChange, empty, emptyOption = '—', extra,
 }: {
   label: string;
   value?: ID;
   options: FieldDef[];
   onChange: (v: ID | undefined) => void;
+  /** shown when there are no fields to choose between */
   empty: string;
+  /** what picking nothing actually does, spelled out rather than a dash */
+  emptyOption?: string;
   extra?: React.ReactNode;
 }) {
   return (
@@ -413,7 +436,7 @@ function Selector({
           onChange={(e) => onChange(e.target.value || undefined)}
           style={{ flex: 1, padding: '4px 7px', fontSize: 12, borderWidth: 2 }}
         >
-          <option value="">—</option>
+          <option value="">{emptyOption}</option>
           {options.map((f) => <option key={f.id} value={f.id}>{f.name}</option>)}
         </select>
       )}

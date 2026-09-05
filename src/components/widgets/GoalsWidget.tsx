@@ -6,10 +6,15 @@ import { Icon } from '../Icons';
 import { Checkbox, Empty } from '../ui';
 import { play } from '../../lib/sound';
 import { relativeDay } from '../../lib/dates';
+import { compareGoalDue } from '../../lib/due';
 
 export function GoalsWidget({ widget, sector }: { widget: Widget; sector: Sector }) {
   const allGoals = useDoc((s) => s.doc.goals);
-  const goals = useMemo(() => allGoals.filter((g) => g.widgetId === widget.id), [allGoals, widget.id]);
+  // soonest deadline first; finished ones settle at the bottom
+  const goals = useMemo(
+    () => allGoals.filter((g) => g.widgetId === widget.id).sort(compareGoalDue),
+    [allGoals, widget.id],
+  );
   const addGoal = useDoc((s) => s.addGoal);
   const updateGoal = useDoc((s) => s.updateGoal);
   const removeGoal = useDoc((s) => s.removeGoal);

@@ -31,7 +31,6 @@ export function GardenPicker({ open, onClose }: { open: boolean; onClose: () => 
   const patchWidgetData = useDoc((s) => s.patchWidgetData);
   const updateWidget = useDoc((s) => s.updateWidget);
   const addItem = useDoc((s) => s.addItem);
-  const addItemStep = useDoc((s) => s.addItemStep);
   const notePick = useDoc((s) => s.notePick);
   const sound = useDoc((s) => s.doc.settings.sound);
   const motionOn = useDoc((s) => s.doc.settings.motion);
@@ -114,8 +113,9 @@ export function GardenPicker({ open, onClose }: { open: boolean; onClose: () => 
     if (entry.type === 'collection' && entry.data?.fields?.length) {
       const group = entry.data.fields.find((f) => f.id === entry.data?.groupBy);
       const first = group?.options?.[0]?.id;
-      const rowId = addItem(id, activeId, group && first ? { [group.id]: first } : {});
-      for (const step of entry.checklist ?? []) addItemStep(rowId, step);
+      // one empty row so it doesn't open as a blank grid. Its checklist stays
+      // empty: the preset's suggestions are offered on the card, not applied.
+      addItem(id, activeId, group && first ? { [group.id]: first } : {});
     }
     // remember which flower you reached for — it's what Wrapped reads back
     const home = homeFlowerOf(entry.key);

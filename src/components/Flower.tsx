@@ -19,6 +19,9 @@ import { mix } from '../lib/themes';
 const C = 50;      // the flower's middle, in viewBox units
 const CY = 40;     // slightly above centre, to leave room for the stem
 
+/** Forms whose petals all meet in the middle, and so need a pad behind them. */
+const CUPPED = new Set<Flower['form']>(['single', 'circle', 'pompom', 'spiral']);
+
 /* ------------------------------------------------------------------ */
 /* petal silhouettes, all drawn pointing straight up from the middle   */
 /* ------------------------------------------------------------------ */
@@ -101,14 +104,43 @@ export const FlowerSvg = memo(function FlowerSvg({
         transition={{ duration: 0.5 }}
         style={{ transformOrigin: '50px 96px' }}
       >
+        {/*
+          Two pieces of stem, and the reason is worth writing down.
+
+          Petals only overlap near their bases; further out you see between
+          them, and the widest of those gaps is the one directly below the
+          middle — where the stem used to carry on up past the centre. You saw
+          a green line inside the bloom, which is exactly what makes an
+          otherwise symmetrical flower read as sitting off to one side.
+
+          So the stem proper stops at the bloom's lower edge, and a short stub
+          carries on up to meet a *closed* bud, fading out as it opens.
+        */}
         <path
-          d={`M${C} 96 Q${C - 2.5} ${CY + 26} ${C} ${CY + 6}`}
+          d={`M${C} 96 Q${C - 2.5} ${CY + 38} ${C} ${CY + 22}`}
           stroke={p.stem}
           strokeWidth={stroke + 0.4}
           strokeLinecap="round"
           fill="none"
         />
-        {/* one leaf carries the label, the other just balances it */}
+        <motion.path
+          d={`M${C} ${CY + 23} L${C} ${CY + 6}`}
+          stroke={p.stem}
+          strokeWidth={stroke + 0.4}
+          strokeLinecap="round"
+          fill="none"
+          initial={false}
+          animate={{ opacity: open ? 0 : 1 }}
+          transition={{ duration: 0.2 }}
+        />
+        {/*
+          Two leaves that reach the same distance either side of the stem, at
+          different heights. Matching the *extents* is what keeps the whole
+          drawing centred in its box — the earlier pair reached 19 units left
+          and 15 right, which pulled every flower visibly off to one side even
+          though the bloom itself was dead centre. The differing heights keep
+          it from looking machined.
+        */}
         <path
           d={`M${C - 1} 80 C${C - 20} 78 ${C - 25} 66 ${C - 12} 64 C${C - 4} 66 ${C - 2} 73 ${C - 1} 80 Z`}
           fill={p.leaf}
@@ -117,10 +149,10 @@ export const FlowerSvg = memo(function FlowerSvg({
           strokeLinejoin="round"
         />
         <path
-          d={`M${C + 1} 88 C${C + 16} 87 ${C + 20} 78 ${C + 10} 76 C${C + 4} 78 ${C + 2} 83 ${C + 1} 88 Z`}
+          d={`M${C + 1} 88 C${C + 20} 86 ${C + 25} 74 ${C + 12} 72 C${C + 4} 74 ${C + 2} 81 ${C + 1} 88 Z`}
           fill={mix(p.leaf, ink, 0.1)}
           stroke={ink}
-          strokeWidth={2.2}
+          strokeWidth={2.4}
           strokeLinejoin="round"
         />
         {/* the dewdrop that holds the count */}
@@ -147,6 +179,27 @@ export const FlowerSvg = memo(function FlowerSvg({
           </g>
         )}
       </motion.g>
+
+      {/*
+        The receptacle: the pad a bloom actually sits on.
+        Petal bases all converge on the middle, and between them sits a
+        star-shaped void you could see the stem and the paper through — which
+        made a perfectly symmetrical flower read as lopsided, because the eye
+        found the green stem-end instead of the centre. Only the forms whose
+        petals meet in the middle get one, and only once they're open.
+      */}
+      {CUPPED.has(flower.form) && (
+        <motion.circle
+          cx={C}
+          cy={CY}
+          r={13}
+          fill={deep}
+          initial={false}
+          animate={open ? { scale: 1, opacity: 1 } : { scale: 0.2, opacity: 0 }}
+          transition={{ ...spring, delay: open ? 0.04 : 0 }}
+          style={{ transformOrigin: `${C}px ${CY}px`, transformBox: 'view-box' }}
+        />
+      )}
 
       {/* the bloom */}
       {flower.form === 'circle' ? (
@@ -575,6 +628,19 @@ function Ladder({ flower, open, petal, deep, centre, ink, spring }: SubProps) {
   const blooms: [number, number][] = [[0, -20], [-11, -13], [11, -13]];
   return (
     <g>
+      {/* the stalk the rungs hang off — the main stem stops below the bloom */}
+      <motion.path
+        d={`M${C} ${CY + 22} L${C} ${CY - 14}`}
+        stroke={flower.palette.stem}
+        strokeWidth={3.4}
+        strokeLinecap="round"
+        fill="none"
+        initial={false}
+        animate={open ? { opacity: 1, scaleY: 1 } : { opacity: 1, scaleY: 0.55 }}
+        transition={spring}
+        style={{ transformOrigin: `${C}px ${CY + 22}px`, transformBox: 'view-box' }}
+      />
+
       {/* the ladder */}
       {Array.from({ length: rungs }, (_, i) => {
         const y = CY + 20 - i * 7.5;

@@ -4,6 +4,7 @@ import { useDoc } from '../../lib/store';
 import type { EffortTag, Recurrence, Sector, Widget } from '../../lib/types';
 import { finishedOn, isTaskDoneOn, taskAppearsOn, today as todayStr } from '../../lib/dates';
 import { EFFORTS } from '../../lib/effort';
+import { compareTaskDue } from '../../lib/due';
 import { Icon } from '../Icons';
 import { Empty } from '../ui';
 import { TaskRow } from '../TaskRow';
@@ -26,7 +27,8 @@ export function TodoWidget({ widget, sector }: { widget: Widget; sector: Sector 
   const hideDone = widget.data.hideCompleted ?? false;
 
   const mine = useMemo(
-    () => tasks.filter((t) => t.widgetId === widget.id).sort((a, b) => a.order - b.order),
+    // due date first, everywhere. `order` is only the tiebreaker now.
+    () => tasks.filter((t) => t.widgetId === widget.id).sort(compareTaskDue),
     [tasks, widget.id],
   );
 
@@ -44,9 +46,12 @@ export function TodoWidget({ widget, sector }: { widget: Widget; sector: Sector 
     }
     // most recent finishes at the top of the done pile
     done.sort((a, b) => (b.completedOn ?? b.createdOn).localeCompare(a.completedOn ?? a.createdOn));
-    // longest-waiting first, so the thing you keep skipping is at eye level
-    now.sort((a, b) => a.createdOn.localeCompare(b.createdOn));
-    later.sort((a, b) => (a.dueDate ?? '').localeCompare(b.dueDate ?? ''));
+    /*
+      The other three keep the order `mine` already put them in: anything with
+      a deadline is soonest-first, and floating tasks follow with the
+      longest-waiting at eye level. Overdue tasks come out oldest-first for the
+      same reason.
+    */
     return { now, earlier, later, done };
   }, [mine, today]);
 

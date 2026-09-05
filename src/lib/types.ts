@@ -259,6 +259,13 @@ export interface WidgetData {
   sortDir?: 'asc' | 'desc';
   /** narrow the view to one option of the group-by field */
   filterOption?: string;
+  /**
+   * Suggested checklist for a row — "transcript, two letters, 500-word essay".
+   * Offered as one-tap chips on the card and never added on your behalf: a row
+   * that arrives with six unticked boxes you didn't ask for reads as a chore
+   * list rather than a note.
+   */
+  steps?: string[];
 
   /* ---- per-day tracker ---- */
   mode?: TrackerMode;

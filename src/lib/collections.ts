@@ -8,6 +8,7 @@
  */
 import type { CollectionView, FieldDef, FieldType, ID, WidgetData } from './types';
 import type { IconName } from '../components/Icons';
+import { dueFieldOf } from './due';
 
 /* ---------------- palette for select chips ---------------- */
 
@@ -97,7 +98,11 @@ function preset(
       groupBy: byName(opts.groupBy),
       dateField: byName(opts.dateField),
       imageField: byName(opts.imageField),
+      // whatever reads as a deadline, soonest first
+      sortBy: dueFieldOf(fields)?.id,
       sortDir: 'asc',
+      // suggestions for each row's checklist, offered rather than applied
+      steps: opts.checklist,
     }),
   };
 }
