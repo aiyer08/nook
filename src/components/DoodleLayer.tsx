@@ -1,23 +1,8 @@
 import { useMemo, useRef, useState } from 'react';
 import { useDoc, useUI } from '../lib/store';
 import { uid } from '../lib/id';
-import type { Stroke } from '../lib/types';
-
-/** Turn a flat point list into a smooth path with quadratic midpoints. */
-export function strokePath(points: number[]): string {
-  if (points.length < 4) {
-    const [x = 0, y = 0] = points;
-    return `M${x} ${y} l0.1 0.1`;
-  }
-  let d = `M${points[0]} ${points[1]}`;
-  for (let i = 2; i < points.length - 2; i += 2) {
-    const mx = (points[i] + points[i + 2]) / 2;
-    const my = (points[i + 1] + points[i + 3]) / 2;
-    d += ` Q${points[i]} ${points[i + 1]} ${mx} ${my}`;
-  }
-  d += ` L${points[points.length - 2]} ${points[points.length - 1]}`;
-  return d;
-}
+import type { PenTexture, Stroke } from '../lib/types';
+import { brushOutline, inkStyle, strokePath } from '../lib/ink';
 
 function near(stroke: Stroke, x: number, y: number, r: number) {
   const p = stroke.points;
@@ -39,6 +24,7 @@ export function DoodleLayer({ sectorId, width, height }: Props) {
   const addStroke = useDoc((s) => s.addStroke);
   const eraseStrokes = useDoc((s) => s.eraseStrokes);
   const tool = useUI((s) => s.tool);
+  const texture = useDoc((s) => s.doc.settings.penTexture);
   const penColor = useUI((s) => s.penColor);
   const penWidth = useUI((s) => s.penWidth);
 
@@ -129,29 +115,48 @@ export function DoodleLayer({ sectorId, width, height }: Props) {
       }}
       aria-hidden={!active}
     >
-      {strokes.map((s) => (
-        <path
-          key={s.id}
-          d={strokePath(s.points)}
-          stroke={s.color}
-          strokeWidth={s.tool === 'marker' ? s.width * 2.6 : s.width}
-          strokeOpacity={s.tool === 'marker' ? 0.34 : 1}
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          fill="none"
-        />
-      ))}
+      {strokes.map((s) => <Ink key={s.id} stroke={s} texture={texture} />)}
       {live && (
-        <path
-          d={strokePath(live)}
-          stroke={penColor}
-          strokeWidth={tool === 'marker' ? penWidth * 2.6 : penWidth}
-          strokeOpacity={tool === 'marker' ? 0.34 : 1}
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          fill="none"
+        <Ink
+          stroke={{
+            id: 'live', sectorId, color: penColor, width: penWidth,
+            tool: tool === 'marker' ? 'marker' : 'pen', points: live,
+          }}
+          texture={texture}
         />
       )}
     </svg>
+  );
+}
+
+/** One stroke, drawn according to the chosen texture. */
+function Ink({ stroke, texture }: { stroke: Stroke; texture: PenTexture }) {
+  const style = inkStyle(stroke, texture);
+
+  if (style.filled) {
+    return (
+      <path
+        d={brushOutline(stroke.points, style.width)}
+        fill={stroke.color}
+        fillOpacity={style.opacity}
+        stroke={stroke.color}
+        strokeWidth={0.6}
+        strokeOpacity={style.opacity}
+        strokeLinejoin="round"
+      />
+    );
+  }
+
+  return (
+    <path
+      d={strokePath(stroke.points)}
+      stroke={stroke.color}
+      strokeWidth={style.width}
+      strokeOpacity={style.opacity}
+      strokeLinecap={style.cap}
+      strokeLinejoin="round"
+      fill="none"
+      style={style.blend ? { mixBlendMode: style.blend } : undefined}
+    />
   );
 }

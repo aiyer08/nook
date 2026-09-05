@@ -4,6 +4,7 @@ import { Icon } from './Icons';
 import { GRID, useDoc, useUI } from '../lib/store';
 import type { Sector, Widget } from '../lib/types';
 import { PASTELS, readableOn } from '../lib/themes';
+import { seedFrom, wobblyRect } from '../lib/ink';
 import { play } from '../lib/sound';
 
 const MIN_W = 220;
@@ -23,6 +24,7 @@ export function WidgetFrame({ widget, sector, children, locked }: Props) {
   const duplicateWidget = useDoc((s) => s.duplicateWidget);
   const raiseWidget = useDoc((s) => s.raiseWidget);
   const sound = useDoc((s) => s.doc.settings.sound);
+  const wobble = useDoc((s) => s.doc.settings.wobble);
   const selected = useUI((s) => s.selectedWidget === widget.id);
   const select = useUI((s) => s.select);
   const setDragging = useUI((s) => s.setDragging);
@@ -135,7 +137,9 @@ export function WidgetFrame({ widget, sector, children, locked }: Props) {
         height: widget.collapsed ? undefined : h,
         zIndex: active ? 999 : widget.z,
         background: 'var(--surface)',
-        border: '3px solid var(--line)',
+        // with wobble on, the real edge is the SVG below; this keeps the box
+        // the same size so nothing shifts when you toggle it
+        border: `3px solid ${wobble ? 'transparent' : 'var(--line)'}`,
         borderRadius: 'var(--r-lg)',
         boxShadow: active ? 'var(--shadow-lg)' : 'var(--shadow-md)',
         display: 'flex',
@@ -146,6 +150,27 @@ export function WidgetFrame({ widget, sector, children, locked }: Props) {
       }}
       aria-label={widget.title}
     >
+      {/* a hand-drawn edge: the same rectangle, drawn by a slightly unsteady hand */}
+      {wobble && !widget.collapsed && (
+        <svg
+          width={w}
+          height={h}
+          viewBox={`0 0 ${w} ${h}`}
+          aria-hidden="true"
+          style={{ position: 'absolute', inset: 0, pointerEvents: 'none', zIndex: 6, overflow: 'visible' }}
+        >
+          <path
+            d={wobblyRect(w - 3, h - 3, 22, seedFrom(widget.id))}
+            transform="translate(1.5 1.5)"
+            fill="none"
+            stroke="var(--line)"
+            strokeWidth={3}
+            strokeLinejoin="round"
+            strokeLinecap="round"
+          />
+        </svg>
+      )}
+
       {/* washi tape */}
       {widget.tape !== 'none' && (
         <>

@@ -6,6 +6,7 @@ import { Avatar } from './Avatar';
 import { readableOn } from '../lib/themes';
 import { play } from '../lib/sound';
 import { SyncBadge } from './CalendarSync';
+import { DecorDrawer } from './Decorations';
 
 const PEN_COLORS = ['#4A3B35', '#E8697F', '#EFA3B0', '#EFCE7B', '#9FCFB8', '#A3C4E0', '#C0A9DB', '#F2B58F'];
 
@@ -27,7 +28,9 @@ export function TopBar() {
   const mood = useUI((s) => s.avatarMood);
 
   const [penOpen, setPenOpen] = useState(false);
+  const [decorOpen, setDecorOpen] = useState(false);
   const penRef = useRef<HTMLDivElement>(null);
+  const decorRef = useRef<HTMLDivElement>(null);
   const sectors = sortedSectors(doc.sectors);
   const active = doc.activeSectorId;
 
@@ -39,6 +42,15 @@ export function TopBar() {
     window.addEventListener('mousedown', close);
     return () => window.removeEventListener('mousedown', close);
   }, [penOpen]);
+
+  useEffect(() => {
+    if (!decorOpen) return;
+    const close = (e: MouseEvent) => {
+      if (!decorRef.current?.contains(e.target as Node)) setDecorOpen(false);
+    };
+    window.addEventListener('mousedown', close);
+    return () => window.removeEventListener('mousedown', close);
+  }, [decorOpen]);
 
   const switchTab = (id: string) => {
     if (id === active) return;
@@ -135,6 +147,31 @@ export function TopBar() {
                 style={{ width: '100%', border: 'none', background: 'transparent', padding: 0 }}
                 aria-label="Pen thickness"
               />
+            </div>
+          )}
+        </div>
+
+        {/* the decoration drawer */}
+        <div style={{ position: 'relative' }} ref={decorRef}>
+          <button
+            className={`btn icon ${decorOpen ? 'primary' : ''}`}
+            onClick={() => setDecorOpen((v) => !v)}
+            aria-label="Tape and stickers"
+            aria-expanded={decorOpen}
+            title="Washi tape and stickers"
+            style={{ padding: 7 }}
+          >
+            <Icon name="sparkle" size={17} />
+          </button>
+          {decorOpen && active && (
+            <div
+              className="card"
+              style={{
+                position: 'absolute', right: 0, top: 'calc(100% + 8px)', padding: 12,
+                background: 'var(--bg)', zIndex: 50,
+              }}
+            >
+              <DecorDrawer sectorId={active} />
             </div>
           )}
         </div>

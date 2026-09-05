@@ -5,6 +5,8 @@ import {
 } from '../src/lib/dates.ts';
 import { toEmbed, unfurl, safeUrl, normalizeUrl } from '../src/lib/media.ts';
 import { fieldsFromGoogle, toGoogleBody, readWhen } from '../src/lib/gcal-map.ts';
+import { streaks, gridDays, yearDays, correlation, describeCorrelation } from '../src/lib/streaks.ts';
+import { identify, fromDataCiteAttrs } from '../src/lib/papers.ts';
 
 let pass = 0;
 const t = (name, fn) => { fn(); pass++; console.log('  ok  ' + name); };
@@ -250,6 +252,162 @@ t('empty fields are omitted rather than sent as blanks', () => {
   const b = toGoogleBody(ev({ location: '', notes: '' }));
   assert.equal(b.location, undefined);
   assert.equal(b.description, undefined);
+});
+
+
+/* ---------------------------------------------------------------- */
+/* streaks — computed from the date list, never cached               */
+/* ---------------------------------------------------------------- */
+console.log('\nstreaks');
+t('no days means no streak, and says so quietly', () => {
+  const s = streaks([], T);
+  assert.deepEqual({ c: s.current, l: s.longest, n: s.total }, { c: 0, l: 0, n: 0 });
+});
+t('a run ending today is the current streak', () => {
+  const s = streaks(['2026-09-02', '2026-09-03', '2026-09-04'], T);
+  assert.equal(s.current, 3);
+  assert.equal(s.longest, 3);
+  assert.equal(s.todayDone, true);
+});
+t("not having done it yet today does not break the streak", () => {
+  const s = streaks(['2026-09-01', '2026-09-02', '2026-09-03'], T);
+  assert.equal(s.current, 3);
+  assert.equal(s.todayDone, false);
+});
+t('a two-day gap does break it', () => {
+  const s = streaks(['2026-08-30', '2026-08-31', '2026-09-01'], T);
+  assert.equal(s.current, 0);
+  assert.equal(s.longest, 3);
+});
+t('the longest streak survives a break — the whole point', () => {
+  const s = streaks(
+    ['2026-08-01','2026-08-02','2026-08-03','2026-08-04','2026-08-05', '2026-09-04'],
+    T,
+  );
+  assert.equal(s.current, 1);
+  assert.equal(s.longest, 5);
+  assert.equal(s.longestStart, '2026-08-01');
+  assert.equal(s.longestEnd, '2026-08-05');
+});
+t('duplicate and unsorted dates are handled', () => {
+  const s = streaks(['2026-09-03', '2026-09-04', '2026-09-03', '2026-09-02'], T);
+  assert.equal(s.current, 3);
+  assert.equal(s.total, 3);
+});
+t('a streak across a month boundary counts', () => {
+  const s = streaks(['2026-08-30', '2026-08-31', '2026-09-01', '2026-09-02',
+    '2026-09-03', '2026-09-04'], T);
+  assert.equal(s.current, 6);
+});
+t('back-filling a forgotten day repairs the streak with no migration', () => {
+  const before = streaks(['2026-09-01', '2026-09-03', '2026-09-04'], T);
+  assert.equal(before.current, 2);
+  const after = streaks(['2026-09-01', '2026-09-02', '2026-09-03', '2026-09-04'], T);
+  assert.equal(after.current, 4);
+});
+
+console.log('\ngrids');
+t('the habit grid is whole weeks, ending on the week containing today', () => {
+  const g = gridDays(4, T);
+  assert.equal(g.length, 28);
+  assert.ok(g.includes(T));
+  assert.equal(new Date(`${g[0]}T00:00:00`).getDay(), 0); // starts Sunday
+});
+t('year-in-pixels covers a leap year exactly', () => {
+  assert.equal(yearDays(2024).length, 366);
+  assert.equal(yearDays(2026).length, 365);
+  assert.equal(yearDays(2026)[0], '2026-01-01');
+  assert.equal(yearDays(2026)[364], '2026-12-31');
+});
+
+console.log('\ncorrelation, hedged honestly');
+t('too little data refuses to claim a pattern', () => {
+  assert.equal(correlation([[1, 1], [2, 2]]), undefined);
+  assert.match(describeCorrelation(undefined, 2), /few more days/i);
+});
+t('a real relationship is detected', () => {
+  const r = correlation([[1,1],[2,2],[3,3],[4,4],[5,5],[4,4]]);
+  assert.ok(r > 0.9, `expected strong positive, got ${r}`);
+  assert.match(describeCorrelation(r, 6), /line up with getting more done/);
+});
+t('flat data yields no correlation rather than a divide-by-zero', () => {
+  assert.equal(correlation([[3,1],[3,2],[3,3],[3,4],[3,5]]), undefined);
+});
+
+
+/* ---------------------------------------------------------------- */
+/* paper lookup: recognising what was pasted                        */
+/* ---------------------------------------------------------------- */
+console.log('\npaper identifiers');
+t('a bare DOI is recognised', () => {
+  assert.deepEqual(identify('10.1038/nature12373'), { kind: 'doi', doi: '10.1038/nature12373' });
+});
+t('a DOI inside any url is dug out', () => {
+  for (const u of [
+    'https://doi.org/10.1038/nature12373',
+    'https://dx.doi.org/10.1038/nature12373',
+    'https://www.nature.com/articles/nature12373?doi=10.1038/nature12373',
+  ]) assert.equal(identify(u).doi, '10.1038/nature12373', u);
+});
+t('trailing punctuation from a copy-paste is trimmed', () => {
+  assert.equal(identify('see 10.1038/nature12373.').doi, '10.1038/nature12373');
+});
+t('arXiv links in all their forms', () => {
+  for (const u of [
+    'https://arxiv.org/abs/1706.03762',
+    'https://arxiv.org/pdf/1706.03762',
+    'https://arxiv.org/abs/1706.03762v5',
+    'arXiv:1706.03762',
+    '1706.03762',
+  ]) {
+    const got = identify(u);
+    assert.equal(got.kind, 'arxiv', u);
+    assert.equal(got.arxivId, '1706.03762', u);
+  }
+});
+t('the old arXiv id scheme still parses', () => {
+  assert.equal(identify('https://arxiv.org/abs/cs/0501001').arxivId, 'cs/0501001');
+});
+t('a plain url is kept as a url, not guessed at', () => {
+  assert.equal(identify('https://example.com/paper').kind, 'url');
+});
+t('nonsense is refused rather than half-accepted', () => {
+  assert.equal(identify('').kind, 'none');
+  assert.equal(identify('some notes about a paper').kind, 'none');
+});
+
+console.log('\nDataCite mapping');
+t('a DataCite record becomes a readable paper', () => {
+  const p = fromDataCiteAttrs({
+    titles: [{ title: 'Attention Is All You  Need' }],
+    creators: [
+      { name: 'Vaswani, Ashish' },
+      { name: 'Shazeer, Noam' },
+      { name: 'Parmar, Niki' },
+      { name: 'Uszkoreit, Jakob' },
+    ],
+    publicationYear: 2017,
+    descriptions: [{ description: 'We propose a new  architecture.', descriptionType: 'Abstract' }],
+    publisher: 'arXiv',
+  }, '1706.03762');
+  assert.equal(p.title, 'Attention Is All You Need');
+  // "Family, Given" is flipped so it reads like a name
+  assert.equal(p.authors, 'Ashish Vaswani et al.');
+  assert.equal(p.year, '2017');
+  assert.equal(p.abstract, 'We propose a new architecture.');
+  assert.equal(p.url, 'https://arxiv.org/abs/1706.03762');
+  assert.equal(p.doi, '10.48550/arXiv.1706.03762');
+});
+t('three authors or fewer are all named', () => {
+  const p = fromDataCiteAttrs({
+    titles: [{ title: 'A paper' }],
+    creators: [{ givenName: 'Ada', familyName: 'Lovelace' }, { name: 'Grace Hopper' }],
+    publicationYear: 1843,
+  }, '1234.5678');
+  assert.equal(p.authors, 'Ada Lovelace, Grace Hopper');
+});
+t('a record with no title is treated as not found', () => {
+  assert.equal(fromDataCiteAttrs({ creators: [] }, '1'), null);
 });
 
 console.log(`\n${pass} checks passed\n`);

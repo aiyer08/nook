@@ -1,7 +1,8 @@
 import { create } from 'zustand';
 import type {
-  AvatarState, CalendarLink, Contact, Doc, EventItem, Goal, GoogleState, ID, Sector,
-  Settings, Stroke, Subtask, Task, Widget, WidgetType,
+  AvatarState, CalendarLink, CellValue, CollectionItem, Contact, Decoration, Doc, EventItem,
+  FieldDef, Goal, GoogleState, ID, Material, Sector, Settings, Stroke, Subtask, Task, Widget,
+  WidgetType,
 } from './types';
 import { uid } from './id';
 import { PASTELS, THEMES } from './themes';
@@ -18,6 +19,9 @@ export const GRID = 20;
 
 const defaultSettings: Settings = {
   themeId: 'paper',
+  penTexture: 'fineliner',
+  wobble: true,
+  pageTurn: true,
   sound: false, // unexpected sound makes people close apps
   timeTint: true,
   paperTexture: true,
@@ -59,6 +63,9 @@ export function emptyDoc(): Doc {
     goals: [],
     contacts: [],
     strokes: [],
+    decorations: [],
+    items: [],
+    materials: [],
     settings: defaultSettings,
     stats: { completed: 0, streak: 0, lastActiveDate: null, unlocked: [], seen: [] },
     google: { ...defaultGoogle },
@@ -81,6 +88,24 @@ export const WIDGET_DEFAULTS: Record<
   embed:    { title: 'Embed',          w: 380, h: 300, label: 'Embed',          blurb: 'YouTube, Spotify, Maps, Figma.' },
   habits:   { title: 'Habits',         w: 340, h: 300, label: 'Habits',         blurb: 'Recurring things, with a streak.' },
   quote:    { title: 'A note to self', w: 300, h: 200, label: 'Note to self',   blurb: 'One line, in handwriting.' },
+
+  /* one engine, four lenses — most list-shaped pages are a preset of this */
+  collection: { title: 'Collection', w: 520, h: 420, label: 'Collection', blurb: 'Any list, seen as a table, board, calendar or gallery.' },
+
+  /* one record per day, drawn several ways */
+  tracker:  { title: 'Tracker',        w: 400, h: 300, label: 'Tracker',       blurb: 'Habit grid, year in pixels, mood, sleep, weather.' },
+
+  /* the bullet-journal spreads */
+  spread:   { title: 'Spread',         w: 460, h: 420, label: 'Spread',        blurb: 'Future log, monthly, weekly, daily or time-blocked.' },
+
+  /* bespoke shapes */
+  papers:   { title: 'Papers to read', w: 400, h: 380, label: 'Papers to read',blurb: 'Paste a DOI or arXiv link; it fills itself in.' },
+  followups:{ title: 'Follow up on',   w: 380, h: 340, label: 'Follow-ups',    blurb: 'Emails waiting on them, or waiting on you.' },
+  journal:  { title: 'Daily journal',  w: 400, h: 420, label: 'Journal',       blurb: 'The same few questions, every day.' },
+  countdown:{ title: 'Countdown',      w: 300, h: 200, label: 'Countdown',     blurb: 'Days until something big.' },
+  thermometer:{ title: 'Goal',         w: 280, h: 320, label: 'Thermometer',   blurb: 'A jar that fills up. Savings, debt, anything.' },
+  wheel:    { title: 'Level 10 life',  w: 360, h: 380, label: 'Life wheel',    blurb: 'Score each part of life one to ten.' },
+  materials:{ title: 'Materials',      w: 340, h: 340, label: 'Materials locker', blurb: 'Resumes, statements and essays, kept once.' },
 };
 
 function initialData(type: WidgetType): Widget['data'] {
@@ -92,6 +117,25 @@ function initialData(type: WidgetType): Widget['data'] {
     case 'todo': return { effortFilter: 'all', hideCompleted: false };
     case 'calendar': return { monthCursor: today().slice(0, 7) };
     case 'quote': return { text: 'You are allowed to do this slowly.', author: '' };
+    case 'collection': return { view: 'table', fields: [], sortDir: 'asc' };
+    case 'tracker': return { mode: 'grid', days: {}, weeks: 26 };
+    case 'spread': return { range: 'week', cursor: today(), dayStart: 7, dayEnd: 22 };
+    case 'papers': return { papers: [] };
+    case 'followups': return { followups: [] };
+    case 'journal': return {
+      prompts: [
+        'How was today, in a few lines?',
+        'One thing you are proud of',
+        'One thing to do differently',
+        'What got done',
+        'Anything you want to remember',
+      ],
+      entries: {},
+    };
+    case 'countdown': return { targetDate: undefined };
+    case 'thermometer': return { goalAmount: 1000, currentAmount: 0, unit: '$', countDown: false };
+    case 'wheel': return { spokes: [] };
+    case 'materials': return {};
     default: return {};
   }
 }
@@ -166,6 +210,9 @@ function loadDoc(): Doc | null {
       settings: { ...defaultSettings, ...(parsed.settings ?? {}) },
       avatar: { ...defaultAvatar, ...(parsed.avatar ?? {}) },
       stats: { ...emptyDoc().stats, ...(parsed.stats ?? {}) },
+      decorations: parsed.decorations ?? [],
+      items: parsed.items ?? [],
+      materials: parsed.materials ?? [],
       google: {
         ...defaultGoogle,
         ...(parsed.google ?? {}),
@@ -342,6 +389,38 @@ interface DocState {
   eraseStrokes: (ids: ID[]) => void;
   clearStrokes: (sectorId: ID) => void;
 
+  /* decorations */
+  addDecoration: (d: Omit<Decoration, 'id'>) => ID;
+  moveDecoration: (id: ID, x: number, y: number) => void;
+  updateDecoration: (id: ID, patch: Partial<Decoration>) => void;
+  removeDecoration: (id: ID) => void;
+
+  /* collections */
+  addItem: (widgetId: ID, sectorId: ID, values?: Record<ID, CellValue>) => ID;
+  updateItem: (id: ID, patch: Partial<CollectionItem>) => void;
+  setCell: (id: ID, fieldId: ID, value: CellValue) => void;
+  removeItem: (id: ID) => void;
+  moveItem: (id: ID, delta: number) => void;
+  duplicateItem: (id: ID) => void;
+  /** the "you've moved this three times" reckoning */
+  migrateItem: (id: ID) => void;
+  releaseItem: (id: ID) => void;
+  addItemStep: (id: ID, title: string) => void;
+  toggleItemStep: (id: ID, stepId: ID) => void;
+  removeItemStep: (id: ID, stepId: ID) => void;
+  attachMaterial: (itemId: ID, materialId: ID) => void;
+  threadItems: (fromId: ID, toId: ID) => void;
+
+  /* collection schema */
+  setFields: (widgetId: ID, fields: FieldDef[]) => void;
+  addField: (widgetId: ID, field: FieldDef) => void;
+  removeField: (widgetId: ID, fieldId: ID) => void;
+
+  /* materials locker */
+  addMaterial: (m: Omit<Material, 'id'>) => ID;
+  updateMaterial: (id: ID, patch: Partial<Material>) => void;
+  removeMaterial: (id: ID) => void;
+
   /* google calendar */
   setGoogleClientId: (id: string) => void;
   setGoogleAccount: (email: string | undefined) => void;
@@ -470,6 +549,8 @@ export const useDoc = create<DocState>((set, get) => ({
       d.events = d.events.filter((e) => e.sectorId !== id);
       d.goals = d.goals.filter((g) => g.sectorId !== id);
       d.contacts = d.contacts.filter((c) => c.sectorId !== id);
+      d.items = d.items.filter((i) => i.sectorId !== id);
+      d.decorations = d.decorations.filter((x) => x.sectorId !== id);
       d.strokes = d.strokes.filter((s) => s.sectorId !== id);
       if (d.activeSectorId === id) d.activeSectorId = d.sectors[0]?.id ?? null;
     }),
@@ -536,6 +617,7 @@ export const useDoc = create<DocState>((set, get) => ({
       d.events = d.events.filter((e) => e.widgetId !== id);
       d.goals = d.goals.filter((g) => g.widgetId !== id);
       d.contacts = d.contacts.filter((c) => c.widgetId !== id);
+      d.items = d.items.filter((i) => i.widgetId !== id);
       d.google.links = d.google.links.filter((l) => l.widgetId !== id);
     }),
 
@@ -557,6 +639,7 @@ export const useDoc = create<DocState>((set, get) => ({
       d.events.push(...remap(d.events));
       d.goals.push(...remap(d.goals));
       d.contacts.push(...remap(d.contacts));
+      d.items.push(...remap(d.items).map((i) => ({ ...i, links: [] })));
     }),
 
   raiseWidget: (id) =>
@@ -760,6 +843,198 @@ export const useDoc = create<DocState>((set, get) => ({
       d.strokes = d.strokes.filter((s) => s.sectorId !== sectorId);
     }),
 
+  addDecoration: (d) => {
+    const id = uid();
+    get().commit(d.kind === 'tape' ? 'add tape' : 'add sticker', (doc) => {
+      doc.decorations.push({ ...d, id });
+    });
+    return id;
+  },
+
+  moveDecoration: (id, x, y) =>
+    get().commit('move decoration', (d) => {
+      const dec = d.decorations.find((x2) => x2.id === id);
+      if (dec) { dec.x = x; dec.y = y; }
+    }, { merge: true, key: `decor:${id}` }),
+
+  updateDecoration: (id, patch) =>
+    get().commit('edit decoration', (d) => {
+      const dec = d.decorations.find((x) => x.id === id);
+      if (dec) Object.assign(dec, patch);
+    }, { merge: true, key: `decor-edit:${id}` }),
+
+  removeDecoration: (id) =>
+    get().commit('remove decoration', (d) => {
+      d.decorations = d.decorations.filter((x) => x.id !== id);
+    }),
+
+  addItem: (widgetId, sectorId, values = {}) => {
+    const id = uid();
+    get().commit('add row', (d) => {
+      const siblings = d.items.filter((i) => i.widgetId === widgetId);
+      d.items.push({
+        id, widgetId, sectorId, values,
+        order: siblings.length,
+        createdOn: today(),
+        checklist: [],
+        materials: [],
+        links: [],
+        migrations: 0,
+      });
+    });
+    return id;
+  },
+
+  updateItem: (id, patch) =>
+    get().commit('edit row', (d) => {
+      const i = d.items.find((x) => x.id === id);
+      if (i) Object.assign(i, patch);
+    }, { merge: true, key: `item:${id}` }),
+
+  setCell: (id, fieldId, value) =>
+    get().commit('edit row', (d) => {
+      const i = d.items.find((x) => x.id === id);
+      if (!i) return;
+      if (value === undefined || value === '') delete i.values[fieldId];
+      else i.values[fieldId] = value;
+    }, { merge: true, key: `cell:${id}:${fieldId}` }),
+
+  removeItem: (id) =>
+    get().commit('delete row', (d) => {
+      d.items = d.items.filter((i) => i.id !== id);
+      // don't leave dangling threads pointing at it
+      for (const other of d.items) other.links = other.links.filter((l) => l !== id);
+    }),
+
+  moveItem: (id, delta) =>
+    get().commit('reorder rows', (d) => {
+      const item = d.items.find((x) => x.id === id);
+      if (!item) return;
+      const list = d.items.filter((x) => x.widgetId === item.widgetId).sort((a, b) => a.order - b.order);
+      const i = list.findIndex((x) => x.id === id);
+      const j = i + delta;
+      if (j < 0 || j >= list.length) return;
+      [list[i], list[j]] = [list[j], list[i]];
+      list.forEach((x, k) => {
+        const target = d.items.find((y) => y.id === x.id);
+        if (target) target.order = k;
+      });
+    }),
+
+  duplicateItem: (id) =>
+    get().commit('duplicate row', (d) => {
+      const src = d.items.find((x) => x.id === id);
+      if (!src) return;
+      d.items.push({
+        ...clone(src),
+        id: uid(),
+        order: src.order + 0.5,
+        createdOn: today(),
+        migrations: 0,
+        releasedOn: undefined,
+        links: [],
+      });
+      d.items
+        .filter((x) => x.widgetId === src.widgetId)
+        .sort((a, b) => a.order - b.order)
+        .forEach((x, k) => { x.order = k; });
+    }),
+
+  /**
+   * Rolling a row forward. The count is the point: at three the card stops
+   * being a passive reminder and asks you to decide.
+   */
+  migrateItem: (id) =>
+    get().commit('roll forward', (d) => {
+      const i = d.items.find((x) => x.id === id);
+      if (i) i.migrations += 1;
+    }),
+
+  releaseItem: (id) =>
+    get().commit('let it go', (d) => {
+      const i = d.items.find((x) => x.id === id);
+      if (i) i.releasedOn = today();
+    }),
+
+  addItemStep: (id, title) =>
+    get().commit('add requirement', (d) => {
+      const i = d.items.find((x) => x.id === id);
+      if (i) i.checklist.push({ id: uid(), title, done: false });
+    }),
+
+  toggleItemStep: (id, stepId) =>
+    get().commit('tick requirement', (d) => {
+      const step = d.items.find((x) => x.id === id)?.checklist.find((s) => s.id === stepId);
+      if (step) step.done = !step.done;
+    }),
+
+  removeItemStep: (id, stepId) =>
+    get().commit('remove requirement', (d) => {
+      const i = d.items.find((x) => x.id === id);
+      if (i) i.checklist = i.checklist.filter((s) => s.id !== stepId);
+    }),
+
+  attachMaterial: (itemId, materialId) =>
+    get().commit('attach', (d) => {
+      const i = d.items.find((x) => x.id === itemId);
+      if (!i) return;
+      i.materials = i.materials.includes(materialId)
+        ? i.materials.filter((m) => m !== materialId)
+        : [...i.materials, materialId];
+    }),
+
+  /** "see p. 34", both ways, because a one-way thread is a dead end. */
+  threadItems: (fromId, toId) =>
+    get().commit('thread', (d) => {
+      const a = d.items.find((x) => x.id === fromId);
+      const b = d.items.find((x) => x.id === toId);
+      if (!a || !b || a === b) return;
+      const joined = a.links.includes(toId);
+      a.links = joined ? a.links.filter((l) => l !== toId) : [...a.links, toId];
+      b.links = joined ? b.links.filter((l) => l !== fromId) : [...b.links, fromId];
+    }),
+
+  setFields: (widgetId, fields) =>
+    get().commit('edit columns', (d) => {
+      const w = d.widgets.find((x) => x.id === widgetId);
+      if (w) w.data = { ...w.data, fields };
+    }),
+
+  addField: (widgetId, field) =>
+    get().commit('add column', (d) => {
+      const w = d.widgets.find((x) => x.id === widgetId);
+      if (w) w.data = { ...w.data, fields: [...(w.data.fields ?? []), field] };
+    }),
+
+  removeField: (widgetId, fieldId) =>
+    get().commit('remove column', (d) => {
+      const w = d.widgets.find((x) => x.id === widgetId);
+      if (!w) return;
+      w.data = { ...w.data, fields: (w.data.fields ?? []).filter((f) => f.id !== fieldId) };
+      // and drop the orphaned values so they can't resurface later
+      for (const i of d.items) {
+        if (i.widgetId === widgetId) delete i.values[fieldId];
+      }
+    }),
+
+  addMaterial: (m) => {
+    const id = uid();
+    get().commit('add material', (d) => { d.materials.push({ ...m, id }); });
+    return id;
+  },
+
+  updateMaterial: (id, patch) =>
+    get().commit('edit material', (d) => {
+      const m = d.materials.find((x) => x.id === id);
+      if (m) Object.assign(m, patch, { updatedOn: today() });
+    }, { merge: true, key: `material:${id}` }),
+
+  removeMaterial: (id) =>
+    get().commit('delete material', (d) => {
+      d.materials = d.materials.filter((m) => m.id !== id);
+      for (const i of d.items) i.materials = i.materials.filter((x) => x !== id);
+    }),
+
   setGoogleClientId: (id) =>
     get().commit('set Google client', (d) => { d.google.clientId = id.trim(); }),
 
@@ -846,6 +1121,8 @@ export const sortedSectors = (sectors: Sector[]) => [...sectors].sort((a, b) => 
 export const activeSector = (d: Doc) => d.sectors.find((s) => s.id === d.activeSectorId) ?? null;
 export const widgetsOf = (widgets: Widget[], sectorId: ID | null) =>
   widgets.filter((w) => w.sectorId === sectorId).sort((a, b) => a.z - b.z);
+export const itemsOf = (items: CollectionItem[], widgetId: ID) =>
+  items.filter((i) => i.widgetId === widgetId).sort((a, b) => a.order - b.order);
 export const themeById = (id: string) => THEMES.find((t) => t.id === id) ?? THEMES[0];
 
 export function todayStr() {

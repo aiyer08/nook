@@ -9,13 +9,20 @@ import {
   WEEKDAYS, describeRecurrence, finishedOn, isTaskDoneOn, prettyTime, relativeDay, rolloverDays,
 } from '../lib/dates';
 import { play } from '../lib/sound';
+import { Reckoning } from './Reckoning';
 
-/** Warm about failure — never a red "3 DAYS OVERDUE". */
+/**
+ * Warm about failure — never a red "3 DAYS OVERDUE".
+ *
+ * From three days the wording starts pointing at the reckoning inside the
+ * row, because that's the moment the app should stop just reminding you.
+ */
 function waitingLabel(days: number) {
   if (days === 1) return 'From yesterday — let’s try again today';
-  if (days < 5) return `Waiting ${days} days — still here for you`;
-  if (days < 14) return 'Been a while — worth keeping?';
-  return 'Old friend. Do it or let it go, both fine';
+  if (days === 2) return 'Waiting two days — still here for you';
+  if (days < 6) return `Carried ${days} times — open it and decide?`;
+  if (days < 14) return 'Been a while. Do it, schedule it, or let it go';
+  return 'Old friend. Letting go is a real answer';
 }
 
 interface Props {
@@ -41,6 +48,7 @@ export function TaskRow({ task, date, accent, sectorName, dense }: Props) {
 
   const [open, setOpen] = useState(false);
   const [sub, setSub] = useState('');
+  const [dismissed, setDismissed] = useState(false);
 
   const done = isTaskDoneOn(task, date);
   const waiting = rolloverDays(task, date);
@@ -177,6 +185,23 @@ export function TaskRow({ task, date, accent, sectorName, dense }: Props) {
             style={{ overflow: 'hidden' }}
           >
             <div style={{ paddingTop: 10, display: 'grid', gap: 9 }}>
+              {waiting >= 3 && !done && !dismissed && (
+                <Reckoning
+                  title={task.title}
+                  count={waiting}
+                  noun="this"
+                  onDoIt={() => {
+                    // it's being dealt with now: restart the clock from today
+                    updateTask(task.id, { createdOn: date });
+                    setDismissed(true);
+                  }}
+                  onSchedule={(d) => {
+                    updateTask(task.id, { kind: 'dated', dueDate: d, createdOn: date });
+                    setDismissed(true);
+                  }}
+                  onRelease={() => removeTask(task.id)}
+                />
+              )}
               <input
                 value={task.title}
                 onChange={(e) => updateTask(task.id, { title: e.target.value })}

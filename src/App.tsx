@@ -34,6 +34,7 @@ export default function App() {
 
   const theme = themeById(doc.settings.themeId);
   const sectors = sortedSectors(doc.sectors);
+  const turn = doc.settings.pageTurn && doc.settings.motion;
   const sector = activeSector(doc);
   const sectorIndex = sectors.findIndex((s) => s.id === sector?.id);
   // which way the page should slide in from
@@ -147,16 +148,34 @@ export default function App() {
     <div style={{ height: '100dvh', display: 'flex', flexDirection: 'column', position: 'relative', zIndex: 1 }}>
       <TopBar />
 
-      <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+      <div
+        style={{
+          flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column',
+          perspective: turn ? 1600 : undefined,
+        }}
+      >
         <AnimatePresence mode="wait" initial={false}>
           {sector ? (
             <motion.div
               key={sector.id}
-              initial={{ opacity: 0, x: direction * 34 }}
-              animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: direction * -34 }}
-              transition={{ type: 'spring', stiffness: 340, damping: 34 }}
-              style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}
+              /**
+               * A page turn rather than a slide: the incoming page swings in
+               * on the hinge you came from, so the direction you moved is
+               * legible in the motion itself.
+               */
+              initial={turn
+                ? { opacity: 0, rotateY: direction * -32, x: direction * 26 }
+                : { opacity: 0, x: direction * 34 }}
+              animate={{ opacity: 1, rotateY: 0, x: 0 }}
+              exit={turn
+                ? { opacity: 0, rotateY: direction * 24, x: direction * -20 }
+                : { opacity: 0, x: direction * -34 }}
+              transition={{ type: 'spring', stiffness: 300, damping: 30 }}
+              style={{
+                flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column',
+                transformOrigin: direction > 0 ? 'left center' : 'right center',
+                transformStyle: turn ? 'preserve-3d' : undefined,
+              }}
             >
               <Board sector={sector} />
             </motion.div>

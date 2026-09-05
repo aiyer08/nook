@@ -139,6 +139,68 @@ export interface Contact {
   tint?: string;
 }
 
+/* ------------------------------------------------------------------ */
+/* collections: one data shape, four lenses                            */
+/* ------------------------------------------------------------------ */
+
+export type FieldType =
+  | 'text' | 'longtext' | 'number' | 'money' | 'date' | 'select'
+  | 'multiselect' | 'checkbox' | 'stars' | 'url' | 'progress';
+
+export interface FieldOption {
+  id: string;
+  label: string;
+  color: string;
+}
+
+export interface FieldDef {
+  id: ID;
+  name: string;
+  type: FieldType;
+  /** for select / multiselect */
+  options?: FieldOption[];
+  /** stars and progress need a ceiling; number and money take a unit */
+  max?: number;
+  suffix?: string;
+  /** the field used as an item's title. Exactly one per collection. */
+  primary?: boolean;
+}
+
+export type CollectionView = 'table' | 'board' | 'calendar' | 'gallery';
+
+/** A cell. Kept loose on purpose; the field's `type` says how to read it. */
+export type CellValue = string | number | boolean | string[] | undefined;
+
+export interface CollectionItem {
+  id: ID;
+  widgetId: ID;
+  sectorId: ID;
+  values: Record<ID, CellValue>;
+  order: number;
+  createdOn: DateStr;
+  /** per-item checklist — "transcript, 2 letters, 500-word essay" */
+  checklist: Subtask[];
+  /** ids from the materials locker */
+  materials: ID[];
+  /** threading, the BuJo "see p. 34", pointing at other items */
+  links: ID[];
+  /** times rolled forward. Three is where the card asks you a hard question. */
+  migrations: number;
+  releasedOn?: DateStr;
+}
+
+/** Documents kept once and attached many times. */
+export interface Material {
+  id: ID;
+  name: string;
+  kind: 'resume' | 'statement' | 'essay' | 'transcript' | 'letter' | 'portfolio' | 'other';
+  /** a version label, since keeping several is the entire point */
+  version: string;
+  url?: string;
+  notes?: string;
+  updatedOn: DateStr;
+}
+
 export type WidgetType =
   | 'todo'
   | 'goals'
@@ -151,7 +213,16 @@ export type WidgetType =
   | 'image'
   | 'embed'
   | 'habits'
-  | 'quote';
+  | 'quote'
+  /* one engine, four lenses — most list-shaped pages are a preset of this */
+  | 'collection'
+  /* one record per day, drawn several ways */
+  | 'tracker'
+  /* the bullet-journal spreads, one widget with a range mode */
+  | 'spread'
+  /* shapes distinct enough to deserve their own code */
+  | 'papers' | 'followups' | 'journal' | 'countdown' | 'thermometer'
+  | 'wheel' | 'materials';
 
 export type TapeStyle = 'none' | 'left' | 'right' | 'both' | 'corner';
 
@@ -175,6 +246,52 @@ export interface Widget {
 }
 
 export interface WidgetData {
+  /* ---- collection engine ---- */
+  fields?: FieldDef[];
+  view?: CollectionView;
+  /** which select field the board groups by */
+  groupBy?: ID;
+  /** which date field the calendar keys on */
+  dateField?: ID;
+  /** which field the gallery shows as a picture */
+  imageField?: ID;
+  sortBy?: ID;
+  sortDir?: 'asc' | 'desc';
+  /** narrow the view to one option of the group-by field */
+  filterOption?: string;
+
+  /* ---- per-day tracker ---- */
+  mode?: TrackerMode;
+  days?: Record<DateStr, DayEntry>;
+  /** how many weeks of squares the habit grid draws */
+  weeks?: number;
+  /** named series for the stacked bars */
+  series?: { id: ID; label: string; color: string }[];
+  /** rows for the tap-counters: meds, water, routine steps */
+  rows?: { id: ID; label: string; target: number }[];
+  /** palette for year-in-pixels and the weather log */
+  palette?: { key: string; label: string; color: string }[];
+
+  /* ---- spreads ---- */
+  range?: SpreadRange;
+  /** which day/week/month the spread is showing */
+  cursor?: string;
+  dayStart?: number;
+  dayEnd?: number;
+  months?: number;
+
+  /* ---- the rest ---- */
+  targetDate?: DateStr;
+  goalAmount?: number;
+  currentAmount?: number;
+  unit?: string;
+  /** a thermometer that empties (debt) rather than fills (savings) */
+  countDown?: boolean;
+  prompts?: string[];
+  entries?: Record<DateStr, Record<string, string>>;
+  papers?: Paper[];
+  followups?: FollowUp[];
+  spokes?: { id: ID; label: string; score: number }[];
   // notes widget
   content?: string;
   // link widget
@@ -193,6 +310,75 @@ export interface WidgetData {
   // quote widget
   text?: string;
   author?: string;
+}
+
+export type TrackerMode =
+  /** GitHub-contribution squares, with current and longest streak */
+  | 'grid'
+  /** 365 tiny squares, one colour per day */
+  | 'pixels'
+  /** hours slept, steps walked, money spent — a bar per day */
+  | 'bars'
+  /** mood and energy, one tap a day, plotted against tasks finished */
+  | 'mood'
+  /** a tiny icon per day: weather, or how it went */
+  | 'icons'
+  /** one line a day: gratitude, highlight, a memory for the jar */
+  | 'line'
+  /** counters you tap up: meds taken, glasses of water */
+  | 'taps'
+  /** flow and symptoms across a month */
+  | 'cycle';
+
+export type SpreadRange = 'future' | 'month' | 'week' | 'day' | 'hourly';
+
+/** One day's record. Only the keys a given mode needs are ever set. */
+export interface DayEntry {
+  done?: boolean;
+  /** 1–5 */
+  mood?: number;
+  energy?: number;
+  value?: number;
+  note?: string;
+  /** a key into the widget's palette */
+  key?: string;
+  flow?: number;
+  symptoms?: string[];
+  /** stacked bars: seriesId -> amount */
+  amounts?: Record<ID, number>;
+  /** tap rows: rowId -> count */
+  taps?: Record<ID, number>;
+}
+
+export interface Paper {
+  id: ID;
+  title: string;
+  authors: string;
+  year: string;
+  venue?: string;
+  abstract?: string;
+  /** the one-line takeaway, which is the actual point of having read it */
+  takeaway: string;
+  doi?: string;
+  arxivId?: string;
+  url?: string;
+  read: boolean;
+  addedOn: DateStr;
+  stars?: number;
+}
+
+export interface FollowUp {
+  id: ID;
+  person: string;
+  subject: string;
+  sentOn: DateStr;
+  /** nudge me after this many days */
+  nudgeAfter: number;
+  /** waiting on them and waiting on me are entirely different feelings */
+  waitingOn: 'them' | 'me';
+  notes?: string;
+  done: boolean;
+  closedOn?: DateStr;
 }
 
 export interface LinkCard {
@@ -239,8 +425,32 @@ export interface Stroke {
   points: number[]; // flat [x, y, x, y, …]
 }
 
+export type PenTexture = 'fineliner' | 'brush' | 'highlighter';
+
+/** A strip of tape or a sticker, placed on the page for no reason at all. */
+export interface Decoration {
+  id: ID;
+  sectorId: ID;
+  kind: 'tape' | 'sticker';
+  /** which pattern or which sticker */
+  variant: string;
+  x: number;
+  y: number;
+  rotation: number;
+  /** tape only: how long the strip is */
+  length?: number;
+  scale?: number;
+  color?: string;
+}
+
 export interface Settings {
   themeId: string;
+  /** one setting, changing how every pen stroke is drawn */
+  penTexture: PenTexture;
+  /** hand-drawn wobbly widget edges instead of perfect rectangles */
+  wobble: boolean;
+  /** the page-turn between tabs */
+  pageTurn: boolean;
   sound: boolean;
   timeTint: boolean;
   paperTexture: boolean;
@@ -269,6 +479,10 @@ export interface Doc {
   goals: Goal[];
   contacts: Contact[];
   strokes: Stroke[];
+  decorations: Decoration[];
+  /** collection rows live at the top level so deadlines can cut across tabs */
+  items: CollectionItem[];
+  materials: Material[];
   settings: Settings;
   stats: Stats;
   google: GoogleState;

@@ -2,28 +2,14 @@ import { useMemo, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
 import { Panel, Toggle, Field, Row, Empty } from './ui';
 import { Icon, SECTOR_ICONS, type IconName } from './Icons';
-import { useDoc, useUI, WIDGET_DEFAULTS, storageUsed, sortedSectors } from '../lib/store';
-import type { Doc, WidgetType } from '../lib/types';
+import { useDoc, useUI, storageUsed, sortedSectors } from '../lib/store';
+import { CATALOGUE, GROUPS, searchCatalogue, type Entry } from '../lib/catalogue';
+import type { Doc } from '../lib/types';
 import { PASTELS, THEMES, readableOn } from '../lib/themes';
 import { formatBytes } from '../lib/media';
 import { Avatar, AvatarRoom, AVATAR_COLORS, SPECIES_LIST } from './Avatar';
 import { COSMETICS, cosmeticsFor, isUnlocked, type Cosmetic } from '../lib/cosmetics';
 import { seasonOf } from '../lib/dates';
-
-const WIDGET_ICONS: Record<WidgetType, IconName> = {
-  todo: 'list',
-  goals: 'target',
-  calendar: 'calendar',
-  meetings: 'people',
-  contacts: 'heart',
-  dates: 'cake',
-  notes: 'note',
-  link: 'link',
-  image: 'image',
-  embed: 'play',
-  habits: 'repeat',
-  quote: 'sparkle',
-};
 
 /* ------------------------------------------------------------------ */
 /* widget picker                                                       */
@@ -33,52 +19,128 @@ export function WidgetPicker({ open, onClose }: { open: boolean; onClose: () => 
   const activeId = useDoc((s) => s.doc.activeSectorId);
   const sector = useDoc((s) => s.doc.sectors.find((x) => x.id === s.doc.activeSectorId));
   const addWidget = useDoc((s) => s.addWidget);
+  const patchWidgetData = useDoc((s) => s.patchWidgetData);
+  const updateWidget = useDoc((s) => s.updateWidget);
+  const addItem = useDoc((s) => s.addItem);
+  const addItemStep = useDoc((s) => s.addItemStep);
   const toast = useUI((s) => s.toast);
+  const [q, setQ] = useState('');
 
-  const add = (type: WidgetType) => {
+  const results = useMemo(() => searchCatalogue(q, sector?.name ?? ''), [q, sector?.name]);
+
+  const add = (entry: Entry) => {
     if (!activeId) return;
-    addWidget(activeId, type);
-    toast(`Added ${WIDGET_DEFAULTS[type].label} to ${sector?.name ?? 'this page'}.`);
+    const id = addWidget(activeId, entry.type);
+    if (entry.data) patchWidgetData(id, entry.data);
+    if (entry.rename) updateWidget(id, { title: entry.label });
+
+    // a collection with a pipeline should open with a row in its first column
+    if (entry.type === 'collection' && entry.data?.fields?.length) {
+      const group = entry.data.fields.find((f) => f.id === entry.data?.groupBy);
+      const first = group?.options?.[0]?.id;
+      const rowId = addItem(id, activeId, group && first ? { [group.id]: first } : {});
+      for (const step of entry.checklist ?? []) addItemStep(rowId, step);
+    }
+
+    toast(`Added ${entry.label} to ${sector?.name ?? 'this page'}.`);
     onClose();
   };
 
+  /* group the results, but only when nothing is being searched for */
+  const grouped = useMemo(() => {
+    if (q.trim()) return null;
+    return GROUPS.map((g) => ({ group: g, entries: results.filter((e) => e.group === g) }))
+      .filter((x) => x.entries.length);
+  }, [q, results]);
+
   return (
-    <Panel open={open} onClose={onClose} title="Add a widget" subtitle={sector ? `Onto ${sector.name}` : undefined}>
-      <div style={{ display: 'grid', gap: 10 }}>
-        {(Object.keys(WIDGET_DEFAULTS) as WidgetType[]).map((type) => (
-          <motion.button
-            key={type}
-            whileHover={{ y: -2 }}
-            whileTap={{ scale: 0.98 }}
-            onClick={() => add(type)}
-            style={{
-              display: 'flex', gap: 12, alignItems: 'center', textAlign: 'left',
-              padding: 12, borderRadius: 'var(--r)', border: '3px solid var(--line)',
-              background: 'var(--surface)', boxShadow: 'var(--shadow-sm)',
-            }}
-          >
-            <span
-              style={{
-                width: 42, height: 42, borderRadius: 14, flexShrink: 0, display: 'grid',
-                placeItems: 'center', background: sector?.accent ?? 'var(--accent)',
-                border: '3px solid var(--line)', color: readableOn(sector?.accent ?? '#E8A598', '#4A3B35'),
-              }}
-            >
-              <Icon name={WIDGET_ICONS[type]} size={20} />
-            </span>
-            <span style={{ flex: 1 }}>
-              <span style={{ display: 'block', fontWeight: 700, fontSize: 15 }}>
-                {WIDGET_DEFAULTS[type].label}
-              </span>
-              <span style={{ display: 'block', fontSize: 12.5, color: 'var(--ink-soft)' }}>
-                {WIDGET_DEFAULTS[type].blurb}
-              </span>
-            </span>
-            <Icon name="plus" size={17} color="var(--ink-faint)" />
-          </motion.button>
-        ))}
-      </div>
+    <Panel
+      open={open}
+      onClose={onClose}
+      title="Add to this page"
+      subtitle={sector ? `Onto ${sector.name} · ${CATALOGUE.length} things` : undefined}
+      width={470}
+    >
+      <input
+        value={q}
+        onChange={(e) => setQ(e.target.value)}
+        placeholder="Search — applications, habit grid, books, sleep, weekly…"
+        aria-label="Search what to add"
+        autoFocus
+        style={{ width: '100%', marginBottom: 12 }}
+      />
+
+      {grouped
+        ? grouped.map(({ group, entries }) => (
+            <div key={group} style={{ marginBottom: 16 }}>
+              <p
+                style={{
+                  margin: '0 0 7px', fontSize: 11, fontWeight: 700, letterSpacing: '0.05em',
+                  textTransform: 'uppercase', color: 'var(--ink-faint)',
+                }}
+              >
+                {group}
+              </p>
+              <div style={{ display: 'grid', gap: 7 }}>
+                {entries.map((e) => (
+                  <CatalogueRow key={e.key} entry={e} sector={sector} onAdd={() => add(e)} />
+                ))}
+              </div>
+            </div>
+          ))
+        : (
+          <div style={{ display: 'grid', gap: 7 }}>
+            {results.length === 0 && (
+              <Empty icon="sparkle">Nothing matches that. Try “list”, “grid” or “log”.</Empty>
+            )}
+            {results.map((e) => (
+              <CatalogueRow key={e.key} entry={e} sector={sector} onAdd={() => add(e)} />
+            ))}
+          </div>
+        )}
     </Panel>
+  );
+}
+
+function CatalogueRow({
+  entry, sector, onAdd,
+}: {
+  entry: Entry;
+  sector?: { name: string; accent: string };
+  onAdd: () => void;
+}) {
+  const suits = Boolean(sector && entry.sectors?.includes(sector.name));
+  return (
+    <motion.button
+      whileHover={{ y: -2 }}
+      whileTap={{ scale: 0.985 }}
+      onClick={onAdd}
+      style={{
+        display: 'flex', gap: 11, alignItems: 'flex-start', textAlign: 'left',
+        padding: 11, borderRadius: 'var(--r)',
+        border: `3px solid ${suits ? (sector?.accent ?? 'var(--line)') : 'var(--line)'}`,
+        background: suits ? 'var(--accent-tint)' : 'var(--surface)',
+        boxShadow: 'var(--shadow-sm)',
+      }}
+    >
+      <span
+        style={{
+          width: 38, height: 38, borderRadius: 13, flexShrink: 0, display: 'grid',
+          placeItems: 'center', background: sector?.accent ?? 'var(--accent)',
+          border: '3px solid var(--line)',
+          color: readableOn(sector?.accent ?? '#E8A598'),
+        }}
+      >
+        <Icon name={entry.icon} size={18} />
+      </span>
+      <span style={{ flex: 1, minWidth: 0 }}>
+        <span style={{ display: 'block', fontWeight: 700, fontSize: 14 }}>{entry.label}</span>
+        <span style={{ display: 'block', fontSize: 12, color: 'var(--ink-soft)', lineHeight: 1.45 }}>
+          {entry.blurb}
+        </span>
+      </span>
+      <Icon name="plus" size={16} color="var(--ink-faint)" style={{ marginTop: 3 }} />
+    </motion.button>
   );
 }
 
@@ -465,12 +527,43 @@ export function SettingsPanel({ open, onClose }: { open: boolean; onClose: () =>
           hint="Five little bits of paper. Not two hundred."
         />
         <Toggle
+          on={settings.wobble}
+          onChange={(v) => update({ wobble: v })}
+          label="Hand-drawn edges"
+          hint="Slightly unsteady borders. Perfect rectangles read as software."
+        />
+        <Toggle
+          on={settings.pageTurn}
+          onChange={(v) => update({ pageTurn: v })}
+          label="Page turn between tabs"
+          hint="The page swings in on the side you came from."
+        />
+        <Toggle
           on={settings.motion}
           onChange={(v) => update({ motion: v })}
           label="Avatar movement"
           hint="Turn off if the idle breathing is distracting."
         />
       </div>
+
+      <Field label="Pen" hint="One setting, changing how every stroke you've drawn looks.">
+        <Row>
+          {([
+            ['fineliner', 'Fineliner', 'An even line.'],
+            ['brush', 'Brush pen', 'Tapers at both ends.'],
+            ['highlighter', 'Highlighter', 'Wide and translucent.'],
+          ] as const).map(([id, label, why]) => (
+            <button
+              key={id}
+              className={`btn tiny ${settings.penTexture === id ? 'primary' : ''}`}
+              onClick={() => update({ penTexture: id })}
+              title={why}
+            >
+              {label}
+            </button>
+          ))}
+        </Row>
+      </Field>
 
       <Field label="This page">
         <Row>

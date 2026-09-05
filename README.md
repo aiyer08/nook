@@ -59,6 +59,33 @@ lands on the page as an image. Drop a file, or point at an image URL. Paste a
 link and get a preview card; paste a YouTube, Spotify, Vimeo, SoundCloud, Figma
 or Google Maps link and get a live embed.
 
+**Sixty pages, three engines.** Most of what a bullet journal is used for is
+one of three shapes, so instead of sixty widgets there are three engines and a
+catalogue of presets:
+
+- **Collections** — one row shape seen four ways: **table** to compare, **board**
+  for a pipeline, **calendar** for deadlines, **gallery** for things you
+  recognise by their cover. ~35 ready-made ones (application tracker, books,
+  recipes, networking log, subscription audit, packing list, bucket list…), or
+  start blank and add your own columns.
+- **Trackers** — one record per day, drawn eight ways: contribution-style habit
+  grid with current *and* longest streak, year-in-pixels, sleep and steps bars,
+  mood plotted against what you actually finished, weather icons, a line a day,
+  tap-counters for meds and water, and a cycle tracker.
+- **Spreads** — future log, monthly, weekly, daily and time-blocked, reading
+  from whatever is already on the tab.
+
+Plus purpose-built ones: **applications** with a materials locker and a
+per-application checklist, **papers to read** that fill themselves in from a
+DOI, **follow-ups** that turn amber then red, a **journal**, **countdown**,
+**thermometer**, and the **Level 10 life** wheel.
+See [docs/planv2-coverage.md](./docs/planv2-coverage.md) for the item-by-item map.
+
+**It clears itself out.** Carry something forward three times and the card stops
+nodding along: *do it, schedule it, or let it go*. Your avatar asks twice before
+letting go — not to shame you, but because the pause is the point. Letting go is
+framed as a decision, not a failure.
+
 **Google Calendar, both ways.** Real events appear in Nook; events you make in
 Nook appear in Google. Per calendar you pick which widget it lands in and
 whether it's two-way or read-only. Pulling is incremental — Nook keeps Google's
@@ -101,8 +128,18 @@ The plan asked for cozy paper rather than software, so:
 - **Two fonts.** Quicksand for the interface, Caveat by hand for headers and
   empty states only — never body text.
 - **Springs, not slides.** Checkboxes squish then overshoot, widgets lift 3% when
-  you grab them, pages slide in from the direction you came from, and a
-  completed task throws five bits of confetti. Not two hundred.
+  you grab them, and a completed task throws five bits of confetti. Not two
+  hundred.
+- **Page turns, not slides.** Switching tabs swings the new page in on the hinge
+  you came from, so the direction you moved is legible in the motion.
+- **Hand-drawn edges.** Widget borders are wobbly SVG paths, not rectangles —
+  deterministic per widget so an edge never shimmers on re-render. This is the
+  handmade-ceramics thing: a line that drifts a pixel reads as a person.
+- **Three pen textures.** Fineliner, brush (a real taper — filled outlines,
+  since SVG has no variable stroke width) and highlighter that multiplies where
+  strokes overlap. One setting changes every stroke you've drawn.
+- **Washi tape and stickers.** Drag a strip anywhere, pick a pattern, rotate and
+  stretch it. Eleven stickers unlock as you finish things. Useless; the point.
 - **Time-of-day tinting.** A warm amber wash builds after 8pm and fades by
   morning.
 - **Sound** is off by default — a soft pop on tick, a page turn between tabs,
@@ -128,6 +165,12 @@ src/
     cosmetics.ts   what unlocks when
     media.ts       image downscaling, link unfurling, embeds
     sound.ts       synthesised pop / page-turn / chime
+    collections.ts ~35 collection presets, defined as data not components
+    trackers.ts    16 per-day tracker presets
+    catalogue.ts   everything you can add, in one searchable list
+    streaks.ts     current + longest streaks, and the mood correlation
+    ink.ts         pen textures and the wobbly-border geometry
+    papers.ts      DOI via Crossref, arXiv via DataCite
     google.ts      OAuth token handling + Calendar API v3 calls
     gcal-map.ts    Google event <-> Nook event, pure and tested
     sync.ts        the sync engine: pull, push, gravestones, conflicts

@@ -8,6 +8,7 @@ import { DoodleLayer } from './DoodleLayer';
 import { Icon } from './Icons';
 import { imageFromDataTransfer, isUrlLike, normalizeUrl, shrinkImage, toEmbed, unfurl } from '../lib/media';
 import { Empty } from './ui';
+import { DecorLayer } from './Decorations';
 
 const PAD = 220;
 
@@ -112,6 +113,9 @@ export function Board({ sector }: { sector: Sector }) {
         }}
       >
         <div className={`grid-hint ${dragging && sector.snap ? 'show' : ''}`} />
+
+        {/* tape and stickers sit under the widgets, like real tape under a card */}
+        <DecorLayer sectorId={sector.id} editable={!drawing} />
 
         {widgets.length === 0 && (
           <div style={{ position: 'absolute', inset: 0, display: 'grid', placeItems: 'center', pointerEvents: 'none' }}>
