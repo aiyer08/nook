@@ -12,7 +12,7 @@ export type IconName =
   | 'play' | 'clock' | 'chevronLeft' | 'chevronRight' | 'chevronDown' | 'chevronUp'
   | 'download' | 'upload' | 'sound' | 'mute' | 'sun' | 'target' | 'cake' | 'repeat'
   | 'grid' | 'today' | 'list' | 'lock' | 'pencil' | 'dots' | 'flag' | 'bolt' | 'brain'
-  | 'search' | 'sprout' | 'drop' | 'flame' | 'snow' | 'timer' | 'lamp';
+  | 'search' | 'sprout' | 'drop' | 'flame' | 'snow' | 'timer' | 'lamp' | 'cloud';
 
 const P: Record<IconName, string> = {
   briefcase: 'M3 8.5h18v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-10Z M9 8.5V6a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2.5 M3 13h18',
@@ -69,6 +69,7 @@ const P: Record<IconName, string> = {
   dots: 'M6 12h.01 M12 12h.01 M18 12h.01',
   flag: 'M6 21V4 M6 5.2c4-2 8 2 12 0v8c-4 2-8-2-12 0',
   bolt: 'M13.5 3 5.5 13.5h5L10 21l8-10.5h-5L13.5 3Z',
+  cloud: 'M7.5 18.5h9.2a3.8 3.8 0 0 0 .4-7.6 5.6 5.6 0 0 0-10.8-1.2 3.9 3.9 0 0 0 1.2 8.8Z',
   search: 'M10.5 17a6.5 6.5 0 1 0 0-13 6.5 6.5 0 0 0 0 13Z M15.4 15.4 20 20',
   sprout: 'M12 20.5V11 M12 11C12 8 9.6 6 6.5 6c0 3 2.4 5 5.5 5Z M12 11c0-3 2.4-5 5.5-5 0 3-2.4 5-5.5 5Z M8 20.5h8',
   drop: 'M12 3.5s6 6.4 6 10.3A6 6 0 0 1 6 13.8C6 9.9 12 3.5 12 3.5Z',

@@ -11,6 +11,7 @@ import { unlockedIds } from './cosmetics';
 import { nextPlot, seedsDue } from './growth';
 import { dropWidgetContents, moveWidgetTo } from './move';
 import { lectureTitle, missingDates } from './classes';
+import { countFinishedGoals, needsCounting } from './goals';
 import type { Weather } from './weather';
 
 const STORAGE_KEY = 'nook.doc.v2';
@@ -215,6 +216,14 @@ function starterWidgets(sectorId: ID, index: number): Widget[] {
 /* persistence                                                         */
 /* ------------------------------------------------------------------ */
 
+/**
+ * Set when the loader had to change what it read — catching up goal counts,
+ * clearing orphaned records. The document is correct in memory either way;
+ * this is what tells the store to write the repair back out rather than wait
+ * for the next edit to do it.
+ */
+let repairedOnLoad = false;
+
 function loadDoc(): Doc | null {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
@@ -222,7 +231,7 @@ function loadDoc(): Doc | null {
     const parsed = JSON.parse(raw) as Doc;
     if (!parsed || typeof parsed !== 'object') return null;
     // fill in anything a newer version added
-    return {
+    const doc: Doc = {
       ...emptyDoc(),
       ...parsed,
       settings: { ...defaultSettings, ...(parsed.settings ?? {}) },
@@ -233,6 +242,7 @@ function loadDoc(): Doc | null {
       materials: parsed.materials ?? [],
       classes: parsed.classes ?? [],
       lectures: parsed.lectures ?? [],
+      goals: parsed.goals ?? [],
       garden: { ...emptyDoc().garden, ...(parsed.garden ?? {}) },
       google: {
         ...defaultGoogle,
@@ -241,6 +251,46 @@ function loadDoc(): Doc | null {
         clientId: parsed.google?.clientId || defaultGoogle.clientId,
       },
     };
+
+    /*
+      Goals finished before finishing a goal counted for anything, brought up
+      to date. Then the seeds are reconciled, so a garden that was owed one
+      says so straight away instead of on the next tick.
+    */
+    const caught = countFinishedGoals(doc.goals, today());
+    doc.goals = caught.goals;
+    doc.stats.completed += caught.counted;
+    if (caught.counted > 0) repairedOnLoad = true;
+
+    /*
+      Records whose widget or tab is long gone.
+
+      The delete cascade keeps this from happening now, but a board that was
+      tidied *before* it did can still be carrying invisible classes — and an
+      invisible class keeps its syllabus alive in the file store for ever. This
+      is cheap enough to check on every load.
+    */
+    const liveWidgets = new Set(doc.widgets.map((w) => w.id));
+    const liveSectors = new Set(doc.sectors.map((x) => x.id));
+    doc.classes = doc.classes.filter(
+      (c) => liveWidgets.has(c.widgetId) && liveSectors.has(c.sectorId),
+    );
+    const liveClasses = new Set(doc.classes.map((c) => c.id));
+    const lectures = doc.lectures.filter((l) => liveClasses.has(l.classId));
+    if (doc.classes.length !== (parsed.classes ?? []).length
+      || lectures.length !== (parsed.lectures ?? []).length) {
+      repairedOnLoad = true;
+    }
+    doc.lectures = lectures;
+
+    const owed = seedsDue(doc.stats.completed, doc.garden.countedCompletions);
+    if (owed > 0) {
+      doc.garden.seeds += owed;
+      doc.garden.countedCompletions = doc.stats.completed;
+      repairedOnLoad = true;
+    }
+
+    return doc;
   } catch {
     return null;
   }
@@ -409,6 +459,8 @@ interface DocState {
   updateSector: (id: ID, patch: Partial<Sector>) => void;
   removeSector: (id: ID) => void;
   moveSector: (id: ID, delta: number) => void;
+  /** drop a tab at a position in the strip; a whole drag is one undo step */
+  placeSector: (id: ID, index: number) => void;
   setActiveSector: (id: ID) => void;
 
   /* widgets */
@@ -659,6 +711,29 @@ export const useDoc = create<DocState>((set, get) => ({
         if (target) target.order = k;
       });
     }),
+
+  /**
+   * Put a tab at a given position.
+   *
+   * Lift-and-insert rather than a swap: dragging a tab three places along
+   * should slide the others up, not exchange it with whatever happens to sit
+   * three along. Merged under one key so a drag across the strip is a single
+   * ⌘Z, however many positions it passed through.
+   */
+  placeSector: (id, index) =>
+    get().commit('reorder tabs', (d) => {
+      const sorted = [...d.sectors].sort((a, b) => a.order - b.order);
+      const from = sorted.findIndex((s) => s.id === id);
+      if (from < 0) return;
+      const to = Math.max(0, Math.min(sorted.length - 1, index));
+      if (to === from) return;
+      const [moved] = sorted.splice(from, 1);
+      sorted.splice(to, 0, moved);
+      sorted.forEach((s, k) => {
+        const target = d.sectors.find((x) => x.id === s.id);
+        if (target) target.order = k;
+      });
+    }, { merge: true, key: 'reorder-tabs' }),
 
   setActiveSector: (id) => get().quiet((d) => { d.activeSectorId = id; }),
 
@@ -975,14 +1050,58 @@ export const useDoc = create<DocState>((set, get) => ({
     get().commit('add goal', (d) => { d.goals.push({ ...g, id }); });
     return id;
   },
-  updateGoal: (id, patch) =>
+  updateGoal: (id, patch) => {
+    let finished = false;
+    let earnedSeeds = 0;
+
     get().commit('edit goal', (d) => {
       const g = d.goals.find((x) => x.id === id);
       if (!g) return;
       Object.assign(g, patch);
       if (g.target > 0 && g.current >= g.target) g.done = true;
       if (g.current < g.target) g.done = patch.done ?? false;
-    }, { merge: true, key: `goal:${id}` }),
+
+      /*
+        A finished goal is a finished thing.
+
+        This was missing, and it's why a garden could say nothing had been
+        finished after a whole goal was seen through: only ticked tasks ever
+        touched the counter. `countedOn` makes it once-only — untick and
+        re-tick and you don't mint another seed — and gives Wrapped a date to
+        file it under.
+      */
+      if (!needsCounting(g)) return;
+      const day = today();
+      g.countedOn = day;
+      finished = true;
+
+      d.stats.completed += 1;
+      const last = d.stats.lastActiveDate;
+      if (last !== day) {
+        d.stats.streak = last && addDays(last, 1) === day ? d.stats.streak + 1 : 1;
+        d.stats.lastActiveDate = day;
+      }
+      d.stats.bestStreak = Math.max(d.stats.bestStreak ?? 0, d.stats.streak);
+      d.stats.unlocked = unlockedIds(d.stats.completed, seasonOf());
+
+      const due = seedsDue(d.stats.completed, d.garden.countedCompletions);
+      if (due > 0) {
+        d.garden.seeds += due;
+        d.garden.countedCompletions = d.stats.completed;
+        earnedSeeds = due;
+      }
+    }, { merge: true, key: `goal:${id}` });
+
+    if (!finished) return;
+    const ui = useUI.getState();
+    ui.setMood('cheer', 2600);
+    if (earnedSeeds > 0) {
+      ui.toast(
+        earnedSeeds === 1 ? 'A goal done — and a seed for the garden 🌱' : `${earnedSeeds} seeds for the garden 🌱`,
+        'win',
+      );
+    }
+  },
   removeGoal: (id) =>
     get().commit('delete goal', (d) => { d.goals = d.goals.filter((g) => g.id !== id); }),
 
@@ -1455,6 +1574,12 @@ export const useDoc = create<DocState>((set, get) => ({
     });
   },
 }));
+
+/*
+  A repair the loader made is only in memory until something saves. Writing it
+  out now means the fix sticks even if the app is closed without an edit.
+*/
+if (repairedOnLoad) saveDoc(useDoc.getState().doc);
 
 /* ------------------------------------------------------------------ */
 /* selectors                                                           */

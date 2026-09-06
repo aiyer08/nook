@@ -124,6 +124,14 @@ export interface Goal {
   notes: string;
   done: boolean;
   dueDate?: DateStr;
+  /**
+   * The day this goal was first counted as finished.
+   *
+   * Set once, and never cleared: it's what stops a goal you tick, untick and
+   * tick again from minting seeds each time, and it's the date Wrapped files
+   * the achievement under.
+   */
+  countedOn?: DateStr;
 }
 
 export interface Contact {

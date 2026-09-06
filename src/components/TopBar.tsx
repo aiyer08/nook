@@ -6,6 +6,7 @@ import { Avatar } from './Avatar';
 import { readableOn } from '../lib/themes';
 import { play } from '../lib/sound';
 import { SyncBadge } from './CalendarSync';
+import { WeatherChip } from './Sky';
 import { DecorDrawer } from './Decorations';
 import { Popover, usePhone } from './ui';
 
@@ -38,6 +39,11 @@ export function TopBar() {
   const [decorOpen, setDecorOpen] = useState(false);
   const [moreOpen, setMoreOpen] = useState(false);
   const moreBtn = useRef<HTMLButtonElement>(null);
+  const placeSector = useDoc((s) => s.placeSector);
+  /** the tab being dragged along the strip, if any */
+  const [carrying, setCarrying] = useState<string | null>(null);
+  const drag = useRef<{ id: string; startX: number; moved: boolean } | null>(null);
+  const justDragged = useRef(false);
   const penRef = useRef<HTMLDivElement>(null);
   const decorRef = useRef<HTMLDivElement>(null);
   const sectors = sortedSectors(doc.sectors);
@@ -74,6 +80,67 @@ export function TopBar() {
     play('page', doc.settings.sound);
   };
 
+  /**
+   * Drag a tab along the strip to reorder it.
+   *
+   * It swaps as you pass a neighbour rather than waiting for the drop, so the
+   * strip rearranges under your hand and there's nothing to aim at. The DOM
+   * order *is* the display order, so "which tab am I over" is just a hit test.
+   *
+   * Mouse and pen only: on a phone a horizontal drag on the strip is how you
+   * scroll it, and stealing that to reorder would make a long list of tabs
+   * unreachable. The tabs panel has explicit move buttons for that.
+   */
+  const startTabDrag = (e: React.PointerEvent, id: string) => {
+    if (e.pointerType === 'touch' || e.button !== 0) return;
+    const startX = e.clientX;
+    drag.current = { id, startX, moved: false };
+
+    /** Which slot the pointer is over, and put the tab there. */
+    const settle = (clientX: number) => {
+      const d = drag.current;
+      if (!d) return;
+      const tabs = [...document.querySelectorAll('[data-sector-id]')] as HTMLElement[];
+      const over = tabs.findIndex((el) => {
+        const r = el.getBoundingClientRect();
+        return clientX >= r.left && clientX <= r.right;
+      });
+      // past the last tab counts as the end, not as nowhere
+      const last = tabs[tabs.length - 1]?.getBoundingClientRect();
+      const index = over >= 0 ? over : (last && clientX > last.right ? tabs.length - 1 : -1);
+      if (index >= 0) placeSector(d.id, index);
+    };
+
+    const move = (ev: PointerEvent) => {
+      const d = drag.current;
+      if (!d) return;
+      if (!d.moved && Math.abs(ev.clientX - d.startX) < 6) return;
+      if (!d.moved) { d.moved = true; setCarrying(d.id); }
+      settle(ev.clientX);
+    };
+
+    const up = (ev: PointerEvent) => {
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', up);
+      window.removeEventListener('pointercancel', up);
+      // where you let go counts too: a quick flick can arrive with barely a
+      // move event between the press and the release
+      if (drag.current?.moved || Math.abs(ev.clientX - startX) >= 6) {
+        drag.current = drag.current ? { ...drag.current, moved: true } : null;
+        settle(ev.clientX);
+      }
+      // a drag shouldn't also count as the click that switches tab
+      justDragged.current = Boolean(drag.current?.moved);
+      drag.current = null;
+      setCarrying(null);
+      if (justDragged.current) window.setTimeout(() => { justDragged.current = false; }, 0);
+    };
+
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', up);
+    window.addEventListener('pointercancel', up);
+  };
+
   return (
     <header
       style={{
@@ -107,6 +174,9 @@ export function TopBar() {
         </button>
 
         <span style={{ flex: 1 }} />
+
+        {/* the weather outside, when you've asked for it */}
+        <WeatherChip compact={phone} />
 
         <SyncBadge onClick={() => setPanel('calendars')} />
 
@@ -333,11 +403,16 @@ export function TopBar() {
           return (
             <button
               key={s.id}
-              onClick={() => switchTab(s.id)}
+              onClick={() => { if (!justDragged.current) switchTab(s.id); }}
+              onPointerDown={(e) => startTabDrag(e, s.id)}
               aria-current={on ? 'page' : undefined}
               /* the drop target for "drag a widget onto a tab to move it" */
               data-sector-id={s.id}
-              title={dragging && !on ? `Drop a widget here to move it to ${s.name}` : s.name}
+              title={
+                dragging && !on
+                  ? `Drop a widget here to move it to ${s.name}`
+                  : `${s.name} — drag to reorder`
+              }
               style={{
                 position: 'relative',
                 display: 'flex', alignItems: 'center', gap: 7,
@@ -352,9 +427,13 @@ export function TopBar() {
                 color: on ? readableOn(s.accent, '#4A3B35') : 'var(--ink-soft)',
                 fontWeight: 700, fontSize: 14,
                 marginBottom: on ? -3 : dragging ? 4 : 0,
-                boxShadow: on ? 'var(--shadow-sm)' : 'none',
+                boxShadow: carrying === s.id ? 'var(--shadow-lg)' : on ? 'var(--shadow-sm)' : 'none',
                 whiteSpace: 'nowrap',
-                transition: 'all 0.16s var(--spring)',
+                // the tab you're carrying lifts; the rest slide under it
+                transform: carrying === s.id ? 'translateY(-3px) scale(1.03)' : undefined,
+                zIndex: carrying === s.id ? 2 : undefined,
+                cursor: carrying === s.id ? 'grabbing' : undefined,
+                transition: carrying === s.id ? 'none' : 'all 0.16s var(--spring)',
               }}
             >
               <Icon name={s.icon as IconName} size={16} />

@@ -15,6 +15,7 @@ import {
 import { skyFromCode } from '../src/lib/weather.ts';
 import { compareGoalDue, compareRows, compareTaskDue, dueFieldOf, taskWhen } from '../src/lib/due.ts';
 import { dropWidgetContents, moveWidgetTo, travellingWith } from '../src/lib/move.ts';
+import { countFinishedGoals, goalFinished, needsCounting } from '../src/lib/goals.ts';
 import { EMBED_LIMIT, fileIdsIn, kindOfMime, orphans, shouldEmbed } from '../src/lib/files.ts';
 import {
   coverage, currentLecture, describeMeets, lectureTitle, lectureWhen, lecturesOf, meetingDates,
@@ -573,7 +574,13 @@ const wdoc = () => ({
     task({ id: 't5', done: true, completedOn: '2025-12-31' }),
     task({ id: 't6' }),
   ],
-  events: [], goals: [], contacts: [], strokes: [], decorations: [], items: [], materials: [],
+  events: [],
+  goals: [
+    // a goal seen through counts as a finished thing, on the day it was counted
+    { id: 'won', widgetId: 'w1', sectorId: 's', title: 'Read 12 books', target: 12, current: 12, unit: 'books', notes: '', done: true, countedOn: '2026-03-04' },
+    { id: 'going', widgetId: 'w1', sectorId: 's', title: 'Still going', target: 10, current: 3, unit: '', notes: '', done: false },
+  ],
+  contacts: [], strokes: [], decorations: [], items: [], materials: [], classes: [], lectures: [],
   settings: {},
   stats: { completed: 6, streak: 3, lastActiveDate: '2026-03-04', unlocked: [], seen: [], focusMinutes: 125, bestStreak: 9 },
   garden: {
@@ -586,8 +593,22 @@ const wdoc = () => ({
 
 t('only this year is counted, and recurring ticks count too', () => {
   const dates = completionDates(wdoc(), 2026);
-  assert.deepEqual(dates.sort(), ['2026-03-02', '2026-03-02', '2026-03-03', '2026-03-04', '2026-07-09']);
+  // four task completions, one recurring tick, and one goal seen through
+  assert.deepEqual(dates.sort(), [
+    '2026-03-02', '2026-03-02', '2026-03-03', '2026-03-04', '2026-03-04', '2026-07-09',
+  ]);
   assert.equal(completionDates(wdoc(), 2025).length, 1);
+});
+
+t('a finished goal is a finished thing', () => {
+  const w = wrapUp(wdoc(), 2026, '2026-09-04');
+  assert.equal(w.completed, 6, 'five task completions plus the goal');
+  // and it lands in the right month, week and tab
+  assert.equal(w.perMonth[2], 5);
+  assert.equal(w.topSector.count, 6);
+  // a goal still in progress is not a completion
+  const noGoals = { ...wdoc(), goals: [] };
+  assert.equal(wrapUp(noGoals, 2026, '2026-09-04').completed, 5);
 });
 
 t('the week starts on Monday', () => {
@@ -598,13 +619,13 @@ t('the week starts on Monday', () => {
 
 t('wrapped adds up the year', () => {
   const w = wrapUp(wdoc(), 2026, '2026-09-04');
-  assert.equal(w.completed, 5);
+  assert.equal(w.completed, 6);                        // five task ticks, one goal
   assert.equal(w.activeDays, 4);
   assert.equal(w.bestStreak, 3);                       // 2, 3 and 4 March
-  assert.equal(w.perMonth[2], 4);                      // March
+  assert.equal(w.perMonth[2], 5);                      // March, goal included
   assert.equal(w.perMonth[6], 1);                      // July
   assert.equal(w.busiestWeek.start, '2026-03-02');
-  assert.equal(w.busiestWeek.count, 4);
+  assert.equal(w.busiestWeek.count, 5);
   assert.equal(w.busiestDay.date, '2026-03-02');
   assert.equal(w.topSector.name, 'School');
 });
@@ -847,6 +868,50 @@ t('a hand-picked widget colour survives the move', () => {
   d.widgets[0].accent = '#EFCE7B';
   moveWidgetTo(d, 'w1', 'health', { x: 0, y: 0 });
   assert.equal(d.widgets[0].accent, '#EFCE7B');
+});
+
+console.log('\nfinishing a goal');
+
+const goal = (o) => ({
+  id: 'g', widgetId: 'w', sectorId: 's', title: 'g', target: 10, current: 0,
+  unit: '', notes: '', done: false, ...o,
+});
+
+t('a goal is finished when it is ticked or full', () => {
+  assert.equal(goalFinished(goal()), false);
+  assert.equal(goalFinished(goal({ current: 9 })), false);
+  assert.equal(goalFinished(goal({ current: 10 })), true, 'reached the target');
+  assert.equal(goalFinished(goal({ current: 11 })), true, 'and past it');
+  assert.equal(goalFinished(goal({ done: true })), true, 'ticked by hand');
+  // a goal with no target can only be ticked, never filled
+  assert.equal(goalFinished(goal({ target: 0, current: 5 })), false);
+  assert.equal(goalFinished(goal({ target: 0, done: true })), true);
+});
+
+t('a goal is only ever counted once', () => {
+  assert.equal(needsCounting(goal({ done: true })), true);
+  assert.equal(needsCounting(goal({ done: true, countedOn: '2026-01-01' })), false);
+  // untick and re-tick: still counted, so no second seed
+  assert.equal(needsCounting(goal({ done: false, current: 0, countedOn: '2026-01-01' })), false);
+  assert.equal(needsCounting(goal()), false, 'not finished, nothing to count');
+});
+
+t('goals finished before any of this existed get caught up', () => {
+  const before = [
+    goal({ id: 'old-full', current: 10 }),          // finished, never counted
+    goal({ id: 'old-ticked', done: true }),         // ditto
+    goal({ id: 'already', done: true, countedOn: '2026-03-01' }),
+    goal({ id: 'going', current: 4 }),
+  ];
+  const { goals, counted } = countFinishedGoals(before, '2026-09-06');
+  assert.equal(counted, 2, 'the two that had never been counted');
+  assert.equal(goals[0].countedOn, '2026-09-06', 'filed under the day we noticed');
+  assert.equal(goals[0].done, true, 'and marked done, since it is');
+  assert.equal(goals[1].countedOn, '2026-09-06');
+  assert.equal(goals[2].countedOn, '2026-03-01', 'an existing date is left alone');
+  assert.equal(goals[3].countedOn, undefined, 'and one still going is untouched');
+  // running it twice must not count anything again
+  assert.equal(countFinishedGoals(goals, '2026-09-07').counted, 0);
 });
 
 console.log('\nthe file store');

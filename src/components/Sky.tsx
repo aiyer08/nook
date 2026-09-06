@@ -11,7 +11,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { useDoc, useUI } from '../lib/store';
-import { fetchWeather, isFresh, readCache } from '../lib/weather';
+import { Icon } from './Icons';
+import { SKY_LABEL, fetchWeather, isFresh, readCache } from '../lib/weather';
 import type { Sky as SkyKind } from '../lib/weather';
 
 /** Keeps the shared sky in the transient store fresh. One instance, in App. */
@@ -45,6 +46,55 @@ export function WeatherWatch() {
   }, [on, place?.label, place?.lat, place?.lon, setSky]);
 
   return sky ? <WeatherLayer kind={sky.sky} /> : null;
+}
+
+/**
+ * The weather, in the top bar.
+ *
+ * Only there when you've asked for it and an answer has come back — no empty
+ * chip, no spinner, no "—°". Tapping it opens Settings, which is where the
+ * location and the toggle live.
+ */
+export function WeatherChip({ compact = false }: { compact?: boolean }) {
+  const on = useDoc((s) => s.doc.settings.weather);
+  const sky = useUI((s) => s.sky);
+  const setPanel = useUI((s) => s.setPanel);
+
+  if (!on || !sky) return null;
+
+  return (
+    <button
+      className="btn"
+      onClick={() => setPanel('settings')}
+      title={`${SKY_LABEL[sky.sky]}, ${sky.temp}°C in ${sky.place} — tap to change`}
+      aria-label={`Weather: ${SKY_LABEL[sky.sky]}, ${sky.temp} degrees in ${sky.place}`}
+      style={{ gap: 6, padding: compact ? '6px 9px' : undefined }}
+    >
+      <SkyGlyph kind={sky.sky} day={sky.day} />
+      <span style={{ fontWeight: 700 }}>{sky.temp}°</span>
+      {!compact && (
+        <span style={{ fontSize: 12, color: 'var(--ink-soft)', fontWeight: 600 }}>
+          {SKY_LABEL[sky.sky]}
+        </span>
+      )}
+    </button>
+  );
+}
+
+/**
+ * A hand-drawn glyph per sky, in the app's own line style rather than an
+ * emoji — emoji render differently on every device, which is the one thing
+ * this app has been consistent about avoiding.
+ */
+export function SkyGlyph({ kind, day = true, size = 17 }: { kind: SkyKind; day?: boolean; size?: number }) {
+  if (kind === 'clear') {
+    return <Icon name={day ? 'sun' : 'moon'} size={size} color={day ? '#D9A93F' : '#8E9BD6'} />;
+  }
+  if (kind === 'rain') return <Icon name="drop" size={size} color="#7FA9C4" />;
+  if (kind === 'snow') return <Icon name="snow" size={size} color="#9BB6CC" />;
+  if (kind === 'storm') return <Icon name="bolt" size={size} color="#C9A227" />;
+  if (kind === 'fog') return <Icon name="cloud" size={size} color="#B0AAA2" />;
+  return <Icon name="cloud" size={size} color="#9E978E" />;
 }
 
 /** Deterministic pseudo-random, so drops don't jump about on every render. */

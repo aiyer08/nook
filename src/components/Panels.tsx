@@ -108,11 +108,11 @@ export function SectorsPanel({ open, onClose }: { open: boolean; onClose: () => 
               aria-label="Tab name"
               style={{ flex: 1, fontWeight: 700 }}
             />
-            <button className="btn ghost tiny" onClick={() => moveSector(s.id, -1)} disabled={i === 0} aria-label="Move up">
-              <Icon name="chevronUp" size={14} />
+            <button className="btn ghost tiny" onClick={() => moveSector(s.id, -1)} disabled={i === 0} aria-label={`Move ${s.name} earlier`} title="Move it left along the tab strip">
+              <Icon name="chevronLeft" size={14} />
             </button>
-            <button className="btn ghost tiny" onClick={() => moveSector(s.id, 1)} disabled={i === sectors.length - 1} aria-label="Move down">
-              <Icon name="chevronDown" size={14} />
+            <button className="btn ghost tiny" onClick={() => moveSector(s.id, 1)} disabled={i === sectors.length - 1} aria-label={`Move ${s.name} later`} title="Move it right along the tab strip">
+              <Icon name="chevronRight" size={14} />
             </button>
           </div>
 

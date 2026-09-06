@@ -40,7 +40,13 @@ export interface Wrapped {
   topSector: { name: string; count: number } | null;
 }
 
-/** Every date something was finished on, one entry per completion. */
+/**
+ * Every date something was finished on, one entry per completion.
+ *
+ * Tasks *and* goals: seeing a goal through is the most finished a thing can
+ * be, and counting only ticked tasks is what made a year with a goal in it
+ * report nothing at all.
+ */
 export function completionDates(doc: Doc, year?: number): DateStr[] {
   const out: DateStr[] = [];
   const inYear = (d: DateStr) => year === undefined || d.slice(0, 4) === String(year);
@@ -50,6 +56,9 @@ export function completionDates(doc: Doc, year?: number): DateStr[] {
     } else if (t.done && t.completedOn && inYear(t.completedOn)) {
       out.push(t.completedOn);
     }
+  }
+  for (const g of doc.goals ?? []) {
+    if (g.countedOn && inYear(g.countedOn)) out.push(g.countedOn);
   }
   return out;
 }
@@ -152,13 +161,18 @@ export function wrapUp(doc: Doc, year: number, now: DateStr = today()): Wrapped 
 
   const sectorName = new Map(doc.sectors.map((s) => [s.id, s.name]));
   const perSector = new Map<string, number>();
-  for (const t of doc.tasks) {
-    const n = t.recurrence
-      ? (t.completions ?? []).filter((d) => d.slice(0, 4) === String(year)).length
-      : (t.done && t.completedOn?.slice(0, 4) === String(year) ? 1 : 0);
-    if (!n) continue;
-    const name = sectorName.get(t.sectorId);
+  const credit = (sectorId: string, n: number) => {
+    if (!n) return;
+    const name = sectorName.get(sectorId);
     if (name) perSector.set(name, (perSector.get(name) ?? 0) + n);
+  };
+  for (const t of doc.tasks) {
+    credit(t.sectorId, t.recurrence
+      ? (t.completions ?? []).filter((d) => d.slice(0, 4) === String(year)).length
+      : (t.done && t.completedOn?.slice(0, 4) === String(year) ? 1 : 0));
+  }
+  for (const g of doc.goals ?? []) {
+    credit(g.sectorId, g.countedOn?.slice(0, 4) === String(year) ? 1 : 0);
   }
   const ts = best(perSector);
 
