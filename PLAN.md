@@ -1,9 +1,7 @@
 GOAL: make an app similar to notion; allows you to organize your life based on your priorities -- work, school, social, health, etc.
 
 Rationale:
-Notion is notoriously difficult to use. I remember when I first tried to use it, I used their AI build feature, but everything was SO ugly. Like the whole just format of notion is so unappealing to me. 
-
-That's why I want to make a more personizable, custom app. 
+I want to make a more personizable, custom app. 
 Here's what Im envisioning:
 something like google slides where you are able to make shapes and have those be adjustable widget type things 
     - Optional snap-to-grid. Free placement feels great for 5 minutes and looks like a junk drawer after a month. Let people toggle it.
